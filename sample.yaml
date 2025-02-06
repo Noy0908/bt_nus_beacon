@@ -1,0 +1,9 @@
+sample:
+  description: Bluetooth Low Energy UART service with beacon sample
+  name: Bluetooth LE UART service with beacon
+tests:
+  sample.bluetooth.peripheral_uart:
+    sysbuild: true
+    build_only: true
+    platform_allow: nrf54l15dk/nrf54l05/cpuapp nrf54l15dk/nrf54l10/cpuapp nrf54l15dk/nrf54l15/cpuapp
+      nrf52833dk/nrf52833 nrf52840dk/nrf52840
