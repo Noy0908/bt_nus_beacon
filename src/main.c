@@ -78,6 +78,12 @@ static uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
 static K_FIFO_DEFINE(fifo_uart_tx_data);
 static K_FIFO_DEFINE(fifo_uart_rx_data);
 
+
+static const struct bt_data manuf_ad[] = {
+	BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, sizeof(dynamic_manuf_data)),
+};
+
+
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_NUS_VAL),
@@ -595,9 +601,14 @@ static void ble_send_uart_data(struct uart_data_t * uart_data)
 			memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
 			sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
 
-			err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+			err = bt_le_adv_update_data(manuf_ad, ARRAY_SIZE(manuf_ad), sd, ARRAY_SIZE(sd));
 			if (err != 0) {
 				LOG_WRN("Faileed to update scan response dataq: %d", err);
+			}
+			else
+			{
+				LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data+ COMPANY_ID_SIZE);
 			}
 		}
 	}
