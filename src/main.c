@@ -33,56 +33,41 @@
 
 #include <zephyr/logging/log.h>
 
-#define LOG_MODULE_NAME peripheral_uart
-LOG_MODULE_REGISTER(LOG_MODULE_NAME);
+#include "uart_app.h"
 
-#define STACKSIZE CONFIG_BT_NUS_THREAD_STACK_SIZE
-#define PRIORITY 7
+LOG_MODULE_REGISTER(peripheral_uart);
 
-#define DEVICE_NAME CONFIG_BT_DEVICE_NAME
-#define DEVICE_NAME_LEN	(sizeof(DEVICE_NAME) - 1)
 
-#define RUN_STATUS_LED DK_LED1
-#define RUN_LED_BLINK_INTERVAL 1000
+#define STACKSIZE 						CONFIG_BT_NUS_THREAD_STACK_SIZE
+#define PRIORITY 						7
 
-#define CON_STATUS_LED DK_LED2
+#define DEVICE_NAME 					CONFIG_BT_DEVICE_NAME
+#define DEVICE_NAME_LEN					(sizeof(DEVICE_NAME) - 1)
 
-#define KEY_PASSKEY_ACCEPT DK_BTN1_MSK
-#define KEY_PASSKEY_REJECT DK_BTN2_MSK
+#define RUN_STATUS_LED 					DK_LED1
+#define RUN_LED_BLINK_INTERVAL 			1000
 
-#define UART_BUF_SIZE CONFIG_BT_NUS_UART_BUFFER_SIZE
-#define UART_WAIT_FOR_BUF_DELAY K_MSEC(50)
-#define UART_WAIT_FOR_RX CONFIG_BT_NUS_UART_RX_WAIT_TIME
+#define CON_STATUS_LED 					DK_LED2
 
-#define DYNAMIC_MANUF_DATA_SIZE 27
-#define COMPANY_ID_SIZE		2
+#define KEY_PASSKEY_ACCEPT 				DK_BTN1_MSK
+#define KEY_PASSKEY_REJECT 				DK_BTN2_MSK
+
+#define DYNAMIC_MANUF_DATA_SIZE 		27
+#define COMPANY_ID_SIZE					2
 
 static K_SEM_DEFINE(ble_init_ok, 0, 1);
 
 static struct bt_conn *current_conn;
 static struct bt_conn *auth_conn;
-
-static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(nordic_nus_uart));
-static struct k_work_delayable uart_work;
 static struct k_work advertise_start_work;
 
-struct uart_data_t {
-	void *fifo_reserved;
-	uint8_t data[UART_BUF_SIZE];
-	uint16_t len;
-};
 
 static uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
 	{CONFIG_BT_COMPANY_ID};
 
-static K_FIFO_DEFINE(fifo_uart_tx_data);
-static K_FIFO_DEFINE(fifo_uart_rx_data);
-
-
 static const struct bt_data manuf_ad[] = {
 	BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, sizeof(dynamic_manuf_data)),
 };
-
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -110,222 +95,6 @@ static void advertise_start_without_sd(struct k_work *work)
 	LOG_INF("Advertising successfully started");
 }
 
-#ifdef CONFIG_UART_ASYNC_ADAPTER
-UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
-#else
-#define async_adapter NULL
-#endif
-
-static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
-{
-	ARG_UNUSED(dev);
-
-	static size_t aborted_len;
-	struct uart_data_t *buf;
-	static uint8_t *aborted_buf;
-	static bool disable_req;
-
-	switch (evt->type) {
-	case UART_TX_DONE:
-		LOG_DBG("UART_TX_DONE");
-		if ((evt->data.tx.len == 0) ||
-		    (!evt->data.tx.buf)) {
-			return;
-		}
-
-		if (aborted_buf) {
-			buf = CONTAINER_OF(aborted_buf, struct uart_data_t,
-					   data[0]);
-			aborted_buf = NULL;
-			aborted_len = 0;
-		} else {
-			buf = CONTAINER_OF(evt->data.tx.buf, struct uart_data_t,
-					   data[0]);
-		}
-
-		k_free(buf);
-
-		buf = k_fifo_get(&fifo_uart_tx_data, K_NO_WAIT);
-		if (!buf) {
-			return;
-		}
-
-		if (uart_tx(uart, buf->data, buf->len, SYS_FOREVER_MS)) {
-			LOG_WRN("Failed to send data over UART");
-		}
-
-		break;
-
-	case UART_RX_RDY:
-		LOG_DBG("UART_RX_RDY");
-		buf = CONTAINER_OF(evt->data.rx.buf, struct uart_data_t, data[0]);
-		buf->len += evt->data.rx.len;
-
-		if (disable_req) {
-			return;
-		}
-#ifdef CONFIG_BT_NUS_CRLF_UART_TERMINATION
-		if ((evt->data.rx.buf[buf->len - 1] == '\n') ||
-		    (evt->data.rx.buf[buf->len - 1] == '\r')) {
-#endif
-			disable_req = true;
-			uart_rx_disable(uart);
-#ifdef CONFIG_BT_NUS_CRLF_UART_TERMINATION
-		}
-#endif
-		break;
-
-	case UART_RX_DISABLED:
-		LOG_DBG("UART_RX_DISABLED");
-		disable_req = false;
-
-		buf = k_malloc(sizeof(*buf));
-		if (buf) {
-			buf->len = 0;
-		} else {
-			LOG_WRN("Not able to allocate UART receive buffer");
-			k_work_reschedule(&uart_work, UART_WAIT_FOR_BUF_DELAY);
-			return;
-		}
-
-		uart_rx_enable(uart, buf->data, sizeof(buf->data),
-			       UART_WAIT_FOR_RX);
-
-		break;
-
-	case UART_RX_BUF_REQUEST:
-		LOG_DBG("UART_RX_BUF_REQUEST");
-		buf = k_malloc(sizeof(*buf));
-		if (buf) {
-			buf->len = 0;
-			uart_rx_buf_rsp(uart, buf->data, sizeof(buf->data));
-		} else {
-			LOG_WRN("Not able to allocate UART receive buffer");
-		}
-
-		break;
-
-	case UART_RX_BUF_RELEASED:
-		LOG_DBG("UART_RX_BUF_RELEASED");
-		buf = CONTAINER_OF(evt->data.rx_buf.buf, struct uart_data_t,
-				   data[0]);
-
-		if (buf->len > 0) {
-			k_fifo_put(&fifo_uart_rx_data, buf);
-		} else {
-			k_free(buf);
-		}
-
-		break;
-
-	case UART_TX_ABORTED:
-		LOG_DBG("UART_TX_ABORTED");
-		if (!aborted_buf) {
-			aborted_buf = (uint8_t *)evt->data.tx.buf;
-		}
-
-		aborted_len += evt->data.tx.len;
-		buf = CONTAINER_OF((void *)aborted_buf, struct uart_data_t,
-				   data);
-
-		uart_tx(uart, &buf->data[aborted_len],
-			buf->len - aborted_len, SYS_FOREVER_MS);
-
-		break;
-
-	default:
-		break;
-	}
-}
-
-static void uart_work_handler(struct k_work *item)
-{
-	struct uart_data_t *buf;
-
-	buf = k_malloc(sizeof(*buf));
-	if (buf) {
-		buf->len = 0;
-	} else {
-		LOG_WRN("Not able to allocate UART receive buffer");
-		k_work_reschedule(&uart_work, UART_WAIT_FOR_BUF_DELAY);
-		return;
-	}
-
-	uart_rx_enable(uart, buf->data, sizeof(buf->data), UART_WAIT_FOR_RX);
-}
-
-static bool uart_test_async_api(const struct device *dev)
-{
-	const struct uart_driver_api *api =
-			(const struct uart_driver_api *)dev->api;
-
-	return (api->callback_set != NULL);
-}
-
-static int uart_init(void)
-{
-	int err;
-	struct uart_data_t *rx;
-
-	if (!device_is_ready(uart)) {
-		return -ENODEV;
-	}
-
-	rx = k_malloc(sizeof(*rx));
-	if (rx) {
-		rx->len = 0;
-	} else {
-		return -ENOMEM;
-	}
-
-	k_work_init_delayable(&uart_work, uart_work_handler);
-
-
-	if (IS_ENABLED(CONFIG_UART_ASYNC_ADAPTER) && !uart_test_async_api(uart)) {
-		/* Implement API adapter */
-		uart_async_adapter_init(async_adapter, uart);
-		uart = async_adapter;
-	}
-
-	err = uart_callback_set(uart, uart_cb, NULL);
-	if (err) {
-		k_free(rx);
-		LOG_ERR("Cannot initialize UART callback");
-		return err;
-	}
-
-	if (IS_ENABLED(CONFIG_UART_LINE_CTRL)) {
-		LOG_INF("Wait for DTR");
-		while (true) {
-			uint32_t dtr = 0;
-
-			uart_line_ctrl_get(uart, UART_LINE_CTRL_DTR, &dtr);
-			if (dtr) {
-				break;
-			}
-			/* Give CPU resources to low priority threads. */
-			k_sleep(K_MSEC(100));
-		}
-		LOG_INF("DTR set");
-		err = uart_line_ctrl_set(uart, UART_LINE_CTRL_DCD, 1);
-		if (err) {
-			LOG_WRN("Failed to set DCD, ret code %d", err);
-		}
-		err = uart_line_ctrl_set(uart, UART_LINE_CTRL_DSR, 1);
-		if (err) {
-			LOG_WRN("Failed to set DSR, ret code %d", err);
-		}
-	}
-
-	err = uart_rx_enable(uart, rx->data, sizeof(rx->data), UART_WAIT_FOR_RX);
-	if (err) {
-		LOG_ERR("Cannot enable uart reception (err: %d)", err);
-		/* Free the rx buffer only because the tx buffer will be handled in the callback */
-		k_free(rx);
-	}
-
-	return err;
-}
 
 static void connected(struct bt_conn *conn, uint8_t err)
 {
@@ -442,7 +211,7 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks;
 static void bt_receive_cb(struct bt_conn *conn, const uint8_t *const data,
 			  uint16_t len)
 {
-	int err;
+	// int err;
 	char addr[BT_ADDR_LE_STR_LEN] = {0};
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, ARRAY_SIZE(addr));
@@ -478,10 +247,11 @@ static void bt_receive_cb(struct bt_conn *conn, const uint8_t *const data,
 			tx->len++;
 		}
 
-		err = uart_tx(uart, tx->data, tx->len, SYS_FOREVER_MS);
-		if (err) {
-			k_fifo_put(&fifo_uart_tx_data, tx);
-		}
+		// err = uart_tx(uart, tx->data, tx->len, SYS_FOREVER_MS);
+		// if (err) {
+		// 	k_fifo_put(&fifo_uart_tx_data, tx);
+		// }
+		uart_send_data(tx);
 	}
 }
 
@@ -639,6 +409,7 @@ void ble_write_thread(void)
 			   (uart_data.data[uart_data.len - 1] == '\n') ||
 			   (uart_data.data[uart_data.len - 1] == '\r')) {
 #endif
+				// handle_uart_data(&uart_data);		//handle uart command from host mcu
 				ble_send_uart_data(&uart_data);
 				uart_data.len = 0;
 #ifdef CONFIG_BT_NUS_CRLF_UART_TERMINATION
