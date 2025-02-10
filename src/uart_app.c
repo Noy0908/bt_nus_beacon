@@ -177,6 +177,76 @@ int uart_send_data(struct uart_data_t *tx)
     return err; 
 }
 
+extern struct bt_conn *current_conn;
+void handle_uart_data(struct uart_data_t * uart_data)
+{
+    int err = 0;
+    struct uart_cmd_rsp_t *cmd_rsp = (struct uart_cmd_rsp_t *)uart_data->data;
+    switch (cmd_rsp->cmd)
+    {
+    case HOST_UART_PING_CMD:
+        LOG_INF("Received command HOST_UART_PING_CMD");
+        break;
+    case HOST_SEND_NUS_DATA_CMD:
+        if (current_conn) 
+        {
+            /* In a connection - send data via NUS */
+            err = bt_nus_send(NULL, cmd_rsp->data, cmd_rsp->len);
+            if (err) {
+                LOG_WRN("Failed to send data over BLE connection: %d", err);
+            }
+	    }
+        else
+        {
+            LOG_WRN("Not in a connection!");
+        }
+        LOG_INF("Received command HOST_SEND_NUS_DATA_CMD");
+        break;
+    case HOST_SET_ADV_PAYLOAD_CMD:
+        // update_adv_payload(cmd_rsp->data, cmd_rsp->len);
+        LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
+        break;
+    case HOST_DISCONN_BLE_CMD:
+        // disconnect_ble();
+        LOG_INF("Received command HOST_DISCONN_BLE_CMD");
+        break;
+    case HOST_SET_PASSKEY_CMD:
+        // set_passkey(cmd_rsp->data, cmd_rsp->len);
+        LOG_INF("Received command HOST_SET_PASSKEY_CMD");
+        break; 
+    case HOST_SET_UART_BAUDRATE_CMD:
+        // set_uart_baudrate(cmd_rsp->data, cmd_rsp->len);
+        LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
+        break;
+    case HOST_SET_BLE_MAC_ADDRESS_CMD:
+        // set_ble_mac_address(cmd_rsp->data, cmd_rsp->len);
+        LOG_INF("Received command HOST_SET_BLE_MAC_ADDRESS_CMD");
+        break;
+    case HOST_READ_DEVICE_INFO_CMD:
+        // read_device_info();
+        LOG_INF("Received command HOST_READ_DEVICE_INFO_CMD");
+        break;
+    case HOST_ERASE_BOND_DEVICE_CMD:
+        // erase_bond_device();
+        LOG_INF("Received command HOST_ERASE_BOND_DEVICE_CMD");
+        break;
+    case HOST_RESET_DEVICE_CMD:
+        // reset_device();
+        LOG_INF("Received command HOST_RESET_DEVICE_CMD");
+        break;
+    case HOST_READ_BLE_RSSI_CMD:
+        // read_ble_rssi();
+        LOG_INF("Received command HOST_READ_BLE_RSSI_CMD");
+        break;
+    default:
+        LOG_WRN("Received unknown command");
+        break;
+    }
+
+    // uart_send_data(response_payload);           //send response to host mcu
+}
+
+
 int uart_init(void)
 {
 	int err;

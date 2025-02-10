@@ -57,9 +57,10 @@ LOG_MODULE_REGISTER(peripheral_uart);
 
 static K_SEM_DEFINE(ble_init_ok, 0, 1);
 
-static struct bt_conn *current_conn;
 static struct bt_conn *auth_conn;
 static struct k_work advertise_start_work;
+
+struct bt_conn *current_conn;
 
 
 static uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
