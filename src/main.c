@@ -38,10 +38,11 @@
 LOG_MODULE_REGISTER(peripheral_uart);
 
 
-#define STACKSIZE 						CONFIG_BT_NUS_THREAD_STACK_SIZE
+#define STACKSIZE 						0x1000
 #define PRIORITY 						7
 
 #define DEVICE_NAME 					CONFIG_BT_DEVICE_NAME
+#define MAX_NAME_LEN 					15
 #define DEVICE_NAME_LEN					(sizeof(DEVICE_NAME) - 1)
 
 #define RUN_STATUS_LED 					DK_LED1
@@ -54,6 +55,7 @@ LOG_MODULE_REGISTER(peripheral_uart);
 
 #define DYNAMIC_MANUF_DATA_SIZE 		27
 #define COMPANY_ID_SIZE					2
+#define MAX_ADV_DATA_LEN 				31
 
 static K_SEM_DEFINE(ble_init_ok, 0, 1);
 
@@ -62,23 +64,20 @@ static struct k_work advertise_start_work;
 
 struct bt_conn *current_conn;
 
-
+static char device_name[MAX_NAME_LEN] = DEVICE_NAME;
 static uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
 	{CONFIG_BT_COMPANY_ID};
-
-static const struct bt_data manuf_ad[] = {
-	BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, sizeof(dynamic_manuf_data)),
-};
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_NUS_VAL),
-	BT_DATA(BT_DATA_NAME_COMPLETE, DEVICE_NAME, DEVICE_NAME_LEN),
+	BT_DATA(BT_DATA_NAME_COMPLETE, device_name, DEVICE_NAME_LEN),
 };
 
-static struct bt_data sd[] = {
-	BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, sizeof(dynamic_manuf_data)),
-};
+// static struct bt_data sd[] = {
+// 	BT_DATA(BT_DATA_NAME_COMPLETE, device_name, DEVICE_NAME_LEN),
+// 	BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, sizeof(dynamic_manuf_data)),
+// };
 
 static void advertise_start_without_sd(struct k_work *work)
 {
@@ -340,6 +339,7 @@ int main(void)
 	}
 }
 
+
 static void ble_send_uart_data(struct uart_data_t * uart_data)
 {
 	int err = 0;
@@ -359,27 +359,31 @@ static void ble_send_uart_data(struct uart_data_t * uart_data)
 				LOG_WRN("Faileed to update scan response dataq: %d", err);
 			}
 		} else {
-			LOG_INF("Update scan response");
+			LOG_INF("Update advertising data");
 
-			if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE) {
+			if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
 				LOG_WRN("Input string too long. Truncating...");
 			}
 
-			size_t manuf_size = MIN((uart_data->len-1), DYNAMIC_MANUF_DATA_SIZE);
+			size_t manuf_size = MIN((uart_data->len-1), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
 
-			LOG_INF("New manufacturer data length: %i", manuf_size);
+			LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
 
 			memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
-			sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
-
+			// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
+			// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
 			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-			err = bt_le_adv_update_data(manuf_ad, ARRAY_SIZE(manuf_ad), sd, ARRAY_SIZE(sd));
+			 struct bt_data new_ad[] = {
+				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
+				BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
+			};
+			err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
 			if (err != 0) {
-				LOG_WRN("Faileed to update scan response dataq: %d", err);
+				LOG_WRN("Faileed to update adv dataq: %d", err);
 			}
 			else
 			{
-				LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data+ COMPANY_ID_SIZE);
+				LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data + COMPANY_ID_SIZE);
 			}
 		}
 	}

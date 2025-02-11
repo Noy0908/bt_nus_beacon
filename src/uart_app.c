@@ -1,9 +1,11 @@
 #include <uart_async_adapter.h>
+#include <bluetooth/services/nus.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
 
 #include "uart_app.h"
+#include "error_code.h"
 
 LOG_MODULE_DECLARE(peripheral_uart);
 
@@ -19,6 +21,8 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 #else
 #define async_adapter NULL
 #endif
+
+uint8_t basic_state = 0;
 
 
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
@@ -177,14 +181,38 @@ int uart_send_data(struct uart_data_t *tx)
     return err; 
 }
 
+static void uart_send_response(enum uart_cmd_type cmd, uint8_t *data, uint16_t len)
+{
+    struct uart_data_t *response_payload = k_malloc(sizeof(*response_payload));
+	if (response_payload) {
+		response_payload->len = len + 3;
+        response_payload->data[0] = cmd;
+        response_payload->data[1] = len & 0xFF;
+        response_payload->data[2] = (len >> 8) & 0xFF;
+        memcpy(&response_payload->data[3], data, len);
+
+        uart_send_data(response_payload);
+	} else {
+		LOG_WRN("Not able to allocate UART send buffer");
+	}
+}
+
 extern struct bt_conn *current_conn;
 void handle_uart_data(struct uart_data_t * uart_data)
 {
     int err = 0;
+    // struct uart_data_t *response_payload = k_malloc(sizeof(*response_payload));
+	// if (response_payload) {
+	// 	response_payload->len = 0;
+	// } else {
+	// 	LOG_WRN("Not able to allocate UART send buffer");
+	// }
+
     struct uart_cmd_rsp_t *cmd_rsp = (struct uart_cmd_rsp_t *)uart_data->data;
     switch (cmd_rsp->cmd)
     {
     case HOST_UART_PING_CMD:
+        uart_send_response(HOST_UART_PING_CMD, &basic_state, sizeof(basic_state));
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
     case HOST_SEND_NUS_DATA_CMD:
@@ -193,6 +221,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
             /* In a connection - send data via NUS */
             err = bt_nus_send(NULL, cmd_rsp->data, cmd_rsp->len);
             if (err) {
+                // uart_send_response(HOST_SEND_NUS_DATA_CMD, &err, sizeof(err));
                 LOG_WRN("Failed to send data over BLE connection: %d", err);
             }
 	    }
