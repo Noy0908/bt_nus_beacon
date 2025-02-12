@@ -53,7 +53,7 @@ LOG_MODULE_REGISTER(peripheral_uart);
 #define KEY_PASSKEY_ACCEPT 				DK_BTN1_MSK
 #define KEY_PASSKEY_REJECT 				DK_BTN2_MSK
 
-#define DYNAMIC_MANUF_DATA_SIZE 		27
+#define DYNAMIC_MANUF_DATA_SIZE 		25
 #define COMPANY_ID_SIZE					2
 #define MAX_ADV_DATA_LEN 				31
 
@@ -64,6 +64,8 @@ static struct k_work advertise_start_work;
 
 struct bt_conn *current_conn;
 
+size_t manuf_size = 0;
+
 static char device_name[MAX_NAME_LEN] = DEVICE_NAME;
 static uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
 	{CONFIG_BT_COMPANY_ID};
@@ -73,6 +75,7 @@ static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_NUS_VAL),
 	BT_DATA(BT_DATA_NAME_COMPLETE, device_name, DEVICE_NAME_LEN),
 };
+
 
 // static struct bt_data sd[] = {
 // 	BT_DATA(BT_DATA_NAME_COMPLETE, device_name, DEVICE_NAME_LEN),
@@ -86,7 +89,17 @@ static void advertise_start_without_sd(struct k_work *work)
 	adv_params.interval_min = CONFIG_BT_NUS_ADVERTISING_INTERVAL;
 	adv_params.interval_max = CONFIG_BT_NUS_ADVERTISING_INTERVAL; 
 
-	err = bt_le_adv_start(&adv_params, ad, ARRAY_SIZE(ad), NULL, 0);
+	if (manuf_size > COMPANY_ID_SIZE) {
+		struct bt_data new_ad[] = {
+			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
+			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
+		};
+		err = bt_le_adv_start(&adv_params, new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+	}
+	else{
+		err = bt_le_adv_start(&adv_params, ad, ARRAY_SIZE(ad), NULL, 0);
+	}
+
 	if (err) {
 		LOG_ERR("Advertising failed to start (err %d)", err);
 		return;
@@ -352,20 +365,21 @@ static void ble_send_uart_data(struct uart_data_t * uart_data)
 		}
 	} else {
 		/* Not in a connection - update scan response data */
-		if (uart_data->len < 2) {
-			LOG_INF("Disable scan response");
-			err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
-			if (err != 0) {
-				LOG_WRN("Faileed to update scan response dataq: %d", err);
-			}
-		} else {
+		// if (uart_data->len < 2) {
+		// 	LOG_INF("Disable scan response");
+		// 	err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
+		// 	if (err != 0) {
+		// 		LOG_WRN("Faileed to update scan response dataq: %d", err);
+		// 	}
+		// } else 
+		{
 			LOG_INF("Update advertising data");
 
 			if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
 				LOG_WRN("Input string too long. Truncating...");
 			}
 
-			size_t manuf_size = MIN((uart_data->len-1), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
+			manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
 
 			LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
 
@@ -373,7 +387,8 @@ static void ble_send_uart_data(struct uart_data_t * uart_data)
 			// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
 			// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
 			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-			 struct bt_data new_ad[] = {
+			manuf_size += COMPANY_ID_SIZE;
+			struct bt_data new_ad[] = {
 				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
 				BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
 			};
