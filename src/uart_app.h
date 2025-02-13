@@ -9,7 +9,8 @@
 
 
 #define CMD_HEAD_SIZE               3
-#define UART_MAX_PAYLOAD_SIZE       1024
+#define MAX_NAME_LEN 				15
+#define UART_MAX_PAYLOAD_SIZE       300
 #define UART_BUF_SIZE               CONFIG_BT_NUS_UART_BUFFER_SIZE
 #define UART_WAIT_FOR_BUF_DELAY     K_MSEC(50)
 #define UART_WAIT_FOR_RX            CONFIG_BT_NUS_UART_RX_WAIT_TIME
@@ -33,10 +34,10 @@ enum uart_cmd_type {
      * 3: (1) Advertising (0) not advertising
      * 4: (1) stored bond (0) no bond
      */
-	HOST_UART_PING_CMD = 0x00,
+	HOST_UART_PING_CMD = 0x01,
 	/**
 	 * @brief host asked to send the payload to the app through NUS.
-     * response with NONE or ERROR.
+     * response with SUCCESS or ERROR.
 	 */
 	HOST_SEND_NUS_DATA_CMD,
 	/**
@@ -52,22 +53,22 @@ enum uart_cmd_type {
 	HOST_SET_ADV_PAYLOAD_CMD,
 	/**
 	 * @brief host forcefully disconnect the ble connection.
-	 * response with NONE or ERROR.
+	 * response with SUCCESS or ERROR.
 	 */
 	HOST_DISCONN_BLE_CMD,
 	/**
 	 * @brief host set the passkey to nRF5 device to pair.
-     * response with NONE or ERROR.
+     * response with SUCCESS or ERROR.
 	 */
 	HOST_SET_PASSKEY_CMD,
 	/**
 	 * @brief host set the uart baud rate.
-	 * response with NONE or ERROR.
+	 * response with SUCCESS or ERROR.
 	 */
 	HOST_SET_UART_BAUDRATE_CMD,
 	/**
 	 * @brief host set nRF5 amc address.
-	 * response with NONE or ERROR.
+	 * response with SUCCESS or ERROR.
 	 */
     HOST_SET_BLE_MAC_ADDRESS_CMD,
     /**
@@ -77,12 +78,12 @@ enum uart_cmd_type {
     HOST_READ_DEVICE_INFO_CMD,
     /**
 	 * @brief host erase ble bond information.
-	 * response with NONE or ERROR.
+	 * response with SUCCESS or ERROR.
 	 */
     HOST_ERASE_BOND_DEVICE_CMD,
     /**
 	 * @brief host ask to reset the ble device .
-	 * response with NONE or ERROR.
+	 * response with SUCCESS or ERROR.
 	 */
     HOST_RESET_DEVICE_CMD,
     /**
@@ -90,6 +91,11 @@ enum uart_cmd_type {
 	 * response with BLE RSSI or ERROR.
 	 */
     HOST_READ_BLE_RSSI_CMD,
+	/**
+	 * @brief host set the device name .
+	 * response with SUCCESS or ERROR.
+	 */
+    HOST_SET_DEVICE_NAME_CMD,
 	/**
 	 * @brief unused cmd, reserved.
 	 *
@@ -100,7 +106,7 @@ enum uart_cmd_type {
 
 struct uart_data_t {
 	void *fifo_reserved;
-	uint8_t data[UART_MAX_PAYLOAD_SIZE+CMD_HEAD_SIZE];
+	uint8_t data[UART_MAX_PAYLOAD_SIZE];
 	uint16_t len;
 };
 
@@ -117,6 +123,8 @@ extern struct k_fifo fifo_uart_rx_data;
 
 
 extern int uart_send_data(struct uart_data_t *tx);
+
+extern void handle_uart_data(struct uart_data_t *uart_data);
 
 extern int uart_init(void);
 

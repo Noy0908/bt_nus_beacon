@@ -3,6 +3,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/types.h>
 
 #include "uart_app.h"
 #include "error_code.h"
@@ -23,6 +24,8 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 #endif
 
 uint8_t basic_state = 0;
+
+extern char device_name[16];
 
 
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
@@ -197,7 +200,25 @@ static void uart_send_response(enum uart_cmd_type cmd, uint8_t *data, uint16_t l
 	}
 }
 
+
+extern int update_advertising(void);
+extern void update_adv_payload(struct uart_cmd_rsp_t * uart_data);
+static void set_device_name(struct uart_cmd_rsp_t * uart_data)
+{
+	if (uart_data->len > MAX_NAME_LEN) {
+		LOG_WRN("Device name too long. Max length is 15 characters.");
+    }
+
+	uint8_t name_len = MIN(uart_data->len, MAX_NAME_LEN);
+	memcpy(device_name, uart_data->data, name_len);
+	device_name[name_len] = '\0';
+	LOG_INF("Device name set to: %s", device_name);
+	bt_set_name(device_name);
+	update_advertising();
+}
+
 extern struct bt_conn *current_conn;
+extern void ble_send_uart_data(struct uart_data_t * uart_data);
 void handle_uart_data(struct uart_data_t * uart_data)
 {
     int err = 0;
@@ -208,8 +229,13 @@ void handle_uart_data(struct uart_data_t * uart_data)
 	// 	LOG_WRN("Not able to allocate UART send buffer");
 	// }
 
-    struct uart_cmd_rsp_t *cmd_rsp = (struct uart_cmd_rsp_t *)uart_data->data;
-    switch (cmd_rsp->cmd)
+    struct uart_cmd_rsp_t cmd_rsp = {0};
+	cmd_rsp.cmd = uart_data->data[0];
+	cmd_rsp.len = (uart_data->data[1] << 8) | uart_data->data[2];
+	memcpy(cmd_rsp.data, &uart_data->data[3], cmd_rsp.len);
+
+	LOG_INF("Received [%d] data from host MCU, cmd =  %0X", cmd_rsp.len,cmd_rsp.cmd);
+    switch (cmd_rsp.cmd)
     {
     case HOST_UART_PING_CMD:
         uart_send_response(HOST_UART_PING_CMD, &basic_state, sizeof(basic_state));
@@ -219,7 +245,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
         if (current_conn) 
         {
             /* In a connection - send data via NUS */
-            err = bt_nus_send(NULL, cmd_rsp->data, cmd_rsp->len);
+            err = bt_nus_send(NULL, cmd_rsp.data, cmd_rsp.len);
             if (err) {
                 // uart_send_response(HOST_SEND_NUS_DATA_CMD, &err, sizeof(err));
                 LOG_WRN("Failed to send data over BLE connection: %d", err);
@@ -232,7 +258,8 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_SEND_NUS_DATA_CMD");
         break;
     case HOST_SET_ADV_PAYLOAD_CMD:
-        // update_adv_payload(cmd_rsp->data, cmd_rsp->len);
+        update_adv_payload(&cmd_rsp);
+		// ble_send_uart_data(&cmd_rsp);
         LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
         break;
     case HOST_DISCONN_BLE_CMD:
@@ -267,6 +294,10 @@ void handle_uart_data(struct uart_data_t * uart_data)
         // read_ble_rssi();
         LOG_INF("Received command HOST_READ_BLE_RSSI_CMD");
         break;
+	case HOST_SET_DEVICE_NAME_CMD:
+		set_device_name(&cmd_rsp);
+		LOG_INF("Received command HOST_SET_DEVICE_NAME_CMD");
+		break;
     default:
         LOG_WRN("Received unknown command");
         break;

@@ -42,7 +42,6 @@ LOG_MODULE_REGISTER(peripheral_uart);
 #define PRIORITY 						7
 
 #define DEVICE_NAME 					CONFIG_BT_DEVICE_NAME
-#define MAX_NAME_LEN 					15
 #define DEVICE_NAME_LEN					(sizeof(DEVICE_NAME) - 1)
 
 #define RUN_STATUS_LED 					DK_LED1
@@ -66,8 +65,8 @@ struct bt_conn *current_conn;
 
 size_t manuf_size = 0;
 
-static char device_name[MAX_NAME_LEN] = DEVICE_NAME;
-static uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
+char device_name[MAX_NAME_LEN+1] = DEVICE_NAME;
+uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
 	{CONFIG_BT_COMPANY_ID};
 
 static const struct bt_data ad[] = {
@@ -90,8 +89,10 @@ static void advertise_start_without_sd(struct k_work *work)
 	adv_params.interval_max = CONFIG_BT_NUS_ADVERTISING_INTERVAL; 
 
 	if (manuf_size > COMPANY_ID_SIZE) {
+		uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+
 		struct bt_data new_ad[] = {
-			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
+			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
 			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
 		};
 		err = bt_le_adv_start(&adv_params, new_ad, ARRAY_SIZE(new_ad), NULL, 0);
@@ -352,8 +353,52 @@ int main(void)
 	}
 }
 
+void update_adv_payload(struct uart_cmd_rsp_t * uart_data)
+{
+	LOG_INF("Update advertising data");
 
-static void ble_send_uart_data(struct uart_data_t * uart_data)
+	if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
+		LOG_WRN("Input string too long. Truncating...");
+	}
+
+	manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
+
+	LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
+
+	memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
+	// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
+	// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
+	// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+	// uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+	manuf_size += COMPANY_ID_SIZE;
+
+	update_advertising();
+}
+
+
+
+int update_advertising(void)
+{
+	int err = 0;
+
+	if (manuf_size > COMPANY_ID_SIZE) 
+	{
+		uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+
+		struct bt_data new_ad[] = {
+			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
+			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
+		};
+		err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+	}
+	else
+	{
+		err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
+	}
+}
+
+
+void ble_send_uart_data(struct uart_data_t * uart_data)
 {
 	int err = 0;
 
@@ -387,9 +432,10 @@ static void ble_send_uart_data(struct uart_data_t * uart_data)
 			// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
 			// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
 			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+			uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
 			manuf_size += COMPANY_ID_SIZE;
 			struct bt_data new_ad[] = {
-				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, strlen(device_name)),
+				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
 				BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
 			};
 			err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
@@ -429,8 +475,8 @@ void ble_write_thread(void)
 			   (uart_data.data[uart_data.len - 1] == '\n') ||
 			   (uart_data.data[uart_data.len - 1] == '\r')) {
 #endif
-				// handle_uart_data(&uart_data);		//handle uart command from host mcu
-				ble_send_uart_data(&uart_data);
+				handle_uart_data(&uart_data);		//handle uart command from host mcu
+				// ble_send_uart_data(&uart_data);
 				uart_data.len = 0;
 #ifdef CONFIG_BT_NUS_CRLF_UART_TERMINATION
 			}
