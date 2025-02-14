@@ -7,19 +7,15 @@
 /** @file
  *  @brief Nordic UART Bridge Service (NUS) with beacon sample
  */
-#include <uart_async_adapter.h>
+// #include <uart_async_adapter.h>
 
 #include <zephyr/types.h>
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/uart.h>
-
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <soc.h>
-
 #include <stdio.h>
 #include <string.h>
-
 #include <zephyr/logging/log.h>
 
 #include "ble_app.h"
@@ -34,12 +30,10 @@ LOG_MODULE_REGISTER(peripheral_uart);
 #define RUN_STATUS_LED 					DK_LED1
 #define RUN_LED_BLINK_INTERVAL 			1000
 
-#define CON_STATUS_LED 					DK_LED2
-
 #define KEY_PASSKEY_ACCEPT 				DK_BTN1_MSK
 #define KEY_PASSKEY_REJECT 				DK_BTN2_MSK
 
-
+#define FW_VERSION	 					"1.0.0"
 
 
 void error(void)
@@ -62,10 +56,13 @@ static void configure_gpio(void)
 	}
 }
 
+
 int main(void)
 {
 	int blink_status = 0;
 	int err = 0;
+
+	LOG_INF("NUS Beacon sample started, the version is %s", FW_VERSION);
 
 	configure_gpio();
 
@@ -113,7 +110,6 @@ void ble_write_thread(void)
 			   (uart_data.data[uart_data.len - 1] == '\r')) {
 #endif
 				handle_uart_data(&uart_data);		//handle uart command from host mcu
-				// ble_send_uart_data(&uart_data);
 				uart_data.len = 0;
 #ifdef CONFIG_BT_NUS_CRLF_UART_TERMINATION
 			}

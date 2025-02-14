@@ -8,8 +8,6 @@
 #define __UART_APP_H_
 
 
-#define CMD_HEAD_SIZE               3
-#define MAX_NAME_LEN 				15
 #define UART_MAX_PAYLOAD_SIZE       300
 #define UART_BUF_SIZE               CONFIG_BT_NUS_UART_BUFFER_SIZE
 #define UART_WAIT_FOR_BUF_DELAY     K_MSEC(50)
@@ -121,6 +119,7 @@ struct uart_cmd_rsp_t {
 // extern struct k_fifo fifo_uart_tx_data;
 extern struct k_fifo fifo_uart_rx_data;
 
+extern bool name_changed;    
 
 extern int uart_send_data(struct uart_data_t *tx);
 

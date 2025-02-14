@@ -15,14 +15,15 @@
 
 LOG_MODULE_DECLARE(peripheral_uart);
 
-static K_SEM_DEFINE(ble_init_ok, 0, 1);
+K_SEM_DEFINE(ble_init_ok, 0, 1);
 
 static struct bt_conn *auth_conn;
 static struct k_work advertise_start_work;
 
+bool name_flag = 0;
 struct bt_conn *current_conn;
 
-size_t manuf_size = 0;
+uint8_t manuf_size = 0;
 
 char device_name[MAX_NAME_LEN+1] = DEVICE_NAME;
 uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
@@ -47,17 +48,31 @@ static void advertise_start_without_sd(struct k_work *work)
 	adv_params.interval_min = CONFIG_BT_NUS_ADVERTISING_INTERVAL;
 	adv_params.interval_max = CONFIG_BT_NUS_ADVERTISING_INTERVAL; 
 
-	if (manuf_size > COMPANY_ID_SIZE) {
+	if (manuf_size > 0) {
 		uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
 
 		struct bt_data new_ad[] = {
 			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
-			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
+			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size + COMPANY_ID_SIZE),
 		};
 		err = bt_le_adv_start(&adv_params, new_ad, ARRAY_SIZE(new_ad), NULL, 0);
 	}
-	else{
-		err = bt_le_adv_start(&adv_params, ad, ARRAY_SIZE(ad), NULL, 0);
+	else
+	{
+		if(name_changed)
+		{
+			uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+
+			struct bt_data new_ad[] = {
+				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
+				// BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size + COMPANY_ID_SIZE),
+			};
+			err = bt_le_adv_start(&adv_params, new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+		}
+		else
+		{
+			err = bt_le_adv_start(&adv_params, ad, ARRAY_SIZE(ad), NULL, 0);
+		}
 	}
 
 	if (err) {
@@ -232,50 +247,35 @@ static struct bt_nus_cb nus_cb = {
 	.received = bt_receive_cb,
 };
 
-
-void update_adv_payload(struct uart_cmd_rsp_t * uart_data)
-{
-	LOG_INF("Update advertising data");
-
-	if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
-		LOG_WRN("Input string too long. Truncating...");
-	}
-
-	manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
-
-	LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
-
-	memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
-	// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
-	// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
-	// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-	// uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
-	manuf_size += COMPANY_ID_SIZE;
-
-	update_advertising();
-}
-
-
-
 int update_advertising(void)
 {
 	int err = 0;
+	uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
 
-	if (manuf_size > COMPANY_ID_SIZE) 
+	if (manuf_size > 0) 
 	{
-		uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
-
+		manuf_size = MIN(DYNAMIC_MANUF_DATA_SIZE - strlen(device_name), manuf_size);
 		struct bt_data new_ad[] = {
 			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
-			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
+			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size + COMPANY_ID_SIZE),
 		};
 		err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+		LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data + COMPANY_ID_SIZE);
 	}
 	else
 	{
-		err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
+		struct bt_data new_ad[] = {
+			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
+			// BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size + COMPANY_ID_SIZE),
+		};
+		err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
 	}
+
+	return err;
 }
+
+
+
 
 
 void ble_send_uart_data(struct uart_data_t * uart_data)
@@ -332,7 +332,7 @@ void ble_send_uart_data(struct uart_data_t * uart_data)
 
 
 
-void nus_ble_init(void)
+int nus_ble_init(void)
 {
     int err;
 
@@ -340,42 +340,40 @@ void nus_ble_init(void)
 		err = bt_conn_auth_cb_register(&conn_auth_callbacks);
 		if (err) {
 			printk("Failed to register authorization callbacks.\n");
-			return 0;
+			return err;
 		}
 
 		err = bt_conn_auth_info_cb_register(&conn_auth_info_callbacks);
 		if (err) {
 			printk("Failed to register authorization info callbacks.\n");
-			return 0;
+			return err;
 		}
 	}
 
 	k_work_init(&advertise_start_work, advertise_start_without_sd);
 
     err = bt_enable(NULL);
-    if(!err)
-    {
-        LOG_INF("Bluetooth initialized");
+	if (err) {
+		printk("Failed to enable ble stack!.\n");
+		return err;
+	}
+	
+   
+	LOG_INF("Bluetooth initialized");
 
-	    k_sem_give(&ble_init_ok);
+	k_sem_give(&ble_init_ok);
 
-        if (IS_ENABLED(CONFIG_SETTINGS)) {
-            settings_load();
-        }
+	if (IS_ENABLED(CONFIG_SETTINGS)) {
+		settings_load();
+	}
 
 	err = bt_nus_init(&nus_cb);
 	if (err) {
 		LOG_ERR("Failed to initialize UART service (err: %d)", err);
-		return 0;
+		return err;
 	}
 
 	k_work_submit(&advertise_start_work);
 
-	if (err) {
-		LOG_ERR("Advertising failed to start (err %d)", err);
-		return 0;
-	}
-    }
-	
     return err;
 }

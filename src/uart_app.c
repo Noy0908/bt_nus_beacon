@@ -6,6 +6,7 @@
 #include <zephyr/types.h>
 
 #include "uart_app.h"
+#include "ble_app.h"
 #include "error_code.h"
 
 LOG_MODULE_DECLARE(peripheral_uart);
@@ -23,9 +24,9 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 #define async_adapter NULL
 #endif
 
-uint8_t basic_state = 0;
 
-extern char device_name[16];
+
+bool name_changed = false;
 
 
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
@@ -184,25 +185,29 @@ int uart_send_data(struct uart_data_t *tx)
     return err; 
 }
 
-static void uart_send_response(enum uart_cmd_type cmd, uint8_t *data, uint16_t len)
+static void update_adv_payload(struct uart_cmd_rsp_t * uart_data)
 {
-    struct uart_data_t *response_payload = k_malloc(sizeof(*response_payload));
-	if (response_payload) {
-		response_payload->len = len + 3;
-        response_payload->data[0] = cmd;
-        response_payload->data[1] = len & 0xFF;
-        response_payload->data[2] = (len >> 8) & 0xFF;
-        memcpy(&response_payload->data[3], data, len);
+	LOG_INF("Update advertising data");
 
-        uart_send_data(response_payload);
-	} else {
-		LOG_WRN("Not able to allocate UART send buffer");
+	if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
+		LOG_WRN("Input string too long. Truncating...");
 	}
+
+	manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
+
+	LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
+
+	memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
+	// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
+	// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
+	// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+	// uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+	// manuf_size += COMPANY_ID_SIZE;
+
+	update_advertising();
 }
 
 
-extern int update_advertising(void);
-extern void update_adv_payload(struct uart_cmd_rsp_t * uart_data);
 static void set_device_name(struct uart_cmd_rsp_t * uart_data)
 {
 	if (uart_data->len > MAX_NAME_LEN) {
@@ -212,13 +217,13 @@ static void set_device_name(struct uart_cmd_rsp_t * uart_data)
 	uint8_t name_len = MIN(uart_data->len, MAX_NAME_LEN);
 	memcpy(device_name, uart_data->data, name_len);
 	device_name[name_len] = '\0';
+	name_changed = true;
 	LOG_INF("Device name set to: %s", device_name);
 	bt_set_name(device_name);
 	update_advertising();
 }
 
-extern struct bt_conn *current_conn;
-extern void ble_send_uart_data(struct uart_data_t * uart_data);
+
 void handle_uart_data(struct uart_data_t * uart_data)
 {
     int err = 0;
@@ -232,13 +237,19 @@ void handle_uart_data(struct uart_data_t * uart_data)
     struct uart_cmd_rsp_t cmd_rsp = {0};
 	cmd_rsp.cmd = uart_data->data[0];
 	cmd_rsp.len = (uart_data->data[1] << 8) | uart_data->data[2];
+	if(cmd_rsp.len > UART_MAX_PAYLOAD_SIZE)
+	{
+		LOG_WRN("Invalid data length");
+		return;
+	}
+
 	memcpy(cmd_rsp.data, &uart_data->data[3], cmd_rsp.len);
 
 	LOG_INF("Received [%d] data from host MCU, cmd =  %0X", cmd_rsp.len,cmd_rsp.cmd);
     switch (cmd_rsp.cmd)
     {
     case HOST_UART_PING_CMD:
-        uart_send_response(HOST_UART_PING_CMD, &basic_state, sizeof(basic_state));
+        // uart_send_response(HOST_UART_PING_CMD, &basic_state, sizeof(basic_state));
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
     case HOST_SEND_NUS_DATA_CMD:
@@ -259,7 +270,6 @@ void handle_uart_data(struct uart_data_t * uart_data)
         break;
     case HOST_SET_ADV_PAYLOAD_CMD:
         update_adv_payload(&cmd_rsp);
-		// ble_send_uart_data(&cmd_rsp);
         LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
         break;
     case HOST_DISCONN_BLE_CMD:
