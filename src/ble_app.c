@@ -24,6 +24,7 @@ bool name_flag = 0;
 struct bt_conn *current_conn;
 
 uint8_t manuf_size = 0;
+unsigned int passkey = 0;
 
 char device_name[MAX_NAME_LEN+1] = DEVICE_NAME;
 uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
@@ -153,6 +154,16 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 };
 
 #if defined(CONFIG_BT_NUS_SECURITY_ENABLED)
+static void auth_passkey_entry(struct bt_conn *conn)
+{
+    char addr[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+    LOG_INF("Passkey entered %s: %06u", addr, passkey);
+
+    // bt_conn_auth_passkey_entry(conn, passkey);
+}
+
 static void auth_cancel(struct bt_conn *conn)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -184,6 +195,7 @@ static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 }
 
 static struct bt_conn_auth_cb conn_auth_callbacks = {
+	.passkey_entry = auth_passkey_entry,
 	.cancel = auth_cancel,
 };
 
@@ -191,6 +203,11 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
 	.pairing_complete = pairing_complete,
 	.pairing_failed = pairing_failed
 };
+
+void bt_passkey_entry(unsigned int passkey)
+{
+	bt_conn_auth_passkey_entry(current_conn, passkey);
+}
 #else
 static struct bt_conn_auth_cb conn_auth_callbacks;
 static struct bt_conn_auth_info_cb conn_auth_info_callbacks;
@@ -365,6 +382,11 @@ int nus_ble_init(void)
 
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
+		if(bt_get_name())
+		{
+			memset(device_name, 0, sizeof(device_name));
+			memcpy(device_name, bt_get_name(), strlen(bt_get_name()));
+		}
 	}
 
 	err = bt_nus_init(&nus_cb);

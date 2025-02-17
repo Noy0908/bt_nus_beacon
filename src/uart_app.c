@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
 #include <uart_async_adapter.h>
 #include <bluetooth/services/nus.h>
 #include <zephyr/kernel.h>
@@ -207,6 +210,19 @@ static void update_adv_payload(struct uart_cmd_rsp_t * uart_data)
 	update_advertising();
 }
 
+static void set_passkey(struct uart_cmd_rsp_t * uart_data)
+{
+	if (uart_data->len != PASSKEY_ENTRY_LENGTH) {
+		LOG_WRN("Invalid passkey length");
+		return;
+	}
+
+	passkey = strtoul(uart_data->data, NULL, 10);
+	// memcpy(&passkey, uart_data->data, sizeof(passkey));
+	LOG_INF("Passkey set to: %06u", passkey);
+	bt_passkey_entry(passkey);
+}
+
 
 static void set_device_name(struct uart_cmd_rsp_t * uart_data)
 {
@@ -277,7 +293,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_DISCONN_BLE_CMD");
         break;
     case HOST_SET_PASSKEY_CMD:
-        // set_passkey(cmd_rsp->data, cmd_rsp->len);
+        set_passkey(&cmd_rsp);
         LOG_INF("Received command HOST_SET_PASSKEY_CMD");
         break; 
     case HOST_SET_UART_BAUDRATE_CMD:
