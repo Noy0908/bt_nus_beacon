@@ -38,7 +38,13 @@ extern int update_advertising(void);
 
 extern int disconnect_ble(void);
 
+extern int set_ble_device_name(char *name);
+
 extern int set_ble_mac_address(uint8_t  *val, uint8_t len);
+
+extern int get_ble_mac_address(uint8_t *val);
+
+extern int16_t read_conn_rssi(int8_t *rssi);
 
 #if defined(CONFIG_BT_NUS_SECURITY_ENABLED)
 int bt_passkey_entry(unsigned int passkey);

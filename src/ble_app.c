@@ -5,6 +5,7 @@
 #include <bluetooth/services/nus.h>
 #include <zephyr/settings/settings.h>
 #include <bluetooth/services/nus.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/types.h>
@@ -20,7 +21,8 @@ K_SEM_DEFINE(ble_init_ok, 0, 1);
 static struct bt_conn *auth_conn;
 static struct k_work advertise_start_work;
 
-bool name_flag = 0;
+bool name_changed = false;
+
 struct bt_conn *current_conn;
 
 uint8_t manuf_size = 0;
@@ -160,8 +162,6 @@ static void auth_passkey_entry(struct bt_conn *conn)
     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
     LOG_INF("Passkey entered %s: %06u", addr, passkey);
-
-    // bt_conn_auth_passkey_entry(conn, passkey);
 }
 
 static void auth_cancel(struct bt_conn *conn)
@@ -216,7 +216,6 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks;
 static void bt_receive_cb(struct bt_conn *conn, const uint8_t *const data,
 			  uint16_t len)
 {
-	// int err;
 	char addr[BT_ADDR_LE_STR_LEN] = {0};
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, ARRAY_SIZE(addr));
@@ -292,60 +291,57 @@ int update_advertising(void)
 }
 
 
+// void ble_send_uart_data(struct uart_data_t * uart_data)
+// {
+// 	int err = 0;
 
+// 	if (current_conn) {
+// 		/* In a connection - send data via NUS */
+// 		err = bt_nus_send(NULL, uart_data->data, uart_data->len);
+// 		if (err) {
+// 			LOG_WRN("Failed to send data over BLE connection: %d", err);
+// 		}
+// 	} else {
+// 		/* Not in a connection - update scan response data */
+// 		// if (uart_data->len < 2) {
+// 		// 	LOG_INF("Disable scan response");
+// 		// 	err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
+// 		// 	if (err != 0) {
+// 		// 		LOG_WRN("Faileed to update scan response dataq: %d", err);
+// 		// 	}
+// 		// } else 
+// 		{
+// 			LOG_INF("Update advertising data");
 
+// 			if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
+// 				LOG_WRN("Input string too long. Truncating...");
+// 			}
 
-void ble_send_uart_data(struct uart_data_t * uart_data)
-{
-	int err = 0;
+// 			manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
 
-	if (current_conn) {
-		/* In a connection - send data via NUS */
-		err = bt_nus_send(NULL, uart_data->data, uart_data->len);
-		if (err) {
-			LOG_WRN("Failed to send data over BLE connection: %d", err);
-		}
-	} else {
-		/* Not in a connection - update scan response data */
-		// if (uart_data->len < 2) {
-		// 	LOG_INF("Disable scan response");
-		// 	err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
-		// 	if (err != 0) {
-		// 		LOG_WRN("Faileed to update scan response dataq: %d", err);
-		// 	}
-		// } else 
-		{
-			LOG_INF("Update advertising data");
+// 			LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
 
-			if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
-				LOG_WRN("Input string too long. Truncating...");
-			}
-
-			manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
-
-			LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
-
-			memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
-			// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
-			// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
-			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-			uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
-			manuf_size += COMPANY_ID_SIZE;
-			struct bt_data new_ad[] = {
-				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
-				BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
-			};
-			err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
-			if (err != 0) {
-				LOG_WRN("Faileed to update adv dataq: %d", err);
-			}
-			else
-			{
-				LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data + COMPANY_ID_SIZE);
-			}
-		}
-	}
-}
+// 			memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
+// 			// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
+// 			// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
+// 			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+// 			uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+// 			manuf_size += COMPANY_ID_SIZE;
+// 			struct bt_data new_ad[] = {
+// 				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
+// 				BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
+// 			};
+// 			err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+// 			if (err != 0) {
+// 				LOG_WRN("Faileed to update adv dataq: %d", err);
+// 			}
+// 			else
+// 			{
+// 				LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data + COMPANY_ID_SIZE);
+// 			}
+// 		}
+// 	}
+// }
 
 int disconnect_ble(void)
 { 
@@ -360,6 +356,21 @@ int disconnect_ble(void)
 	{
 		err = -ENOTCONN;
 	}
+	return err;
+}
+
+int set_ble_device_name(char *name)
+{
+	int err = 0;
+	if (strlen(name) > MAX_NAME_LEN) {
+		LOG_WRN("Device name too long. Max length is 15 characters.");
+		err = -EINVAL;
+	}
+
+	LOG_INF("Device name set to: %s", name);
+	name_changed = true;
+	err = bt_set_name(name);
+	
 	return err;
 }
 
@@ -382,6 +393,56 @@ int set_ble_mac_address(uint8_t  *val, uint8_t len)
 	}
 	return err;
 }
+
+
+int get_ble_mac_address(uint8_t *val)
+{
+	bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+	size_t count = CONFIG_BT_ID_MAX;
+
+	bt_id_get(addrs, &count);
+	if (count > 0) {
+		memcpy(val, addrs[0].a.val, sizeof(addrs[0].a.val));
+		return 0;
+	}
+	return -ENODATA;
+}
+
+
+int16_t read_conn_rssi(int8_t *rssi)
+{
+    struct net_buf *buf, *rsp = NULL;
+    struct bt_hci_cp_read_rssi *cp;
+    struct bt_hci_rp_read_rssi *rp;
+
+    int16_t err;
+	uint16_t conn_handle;
+	bt_hci_get_conn_handle(current_conn, &conn_handle);
+
+    buf = bt_hci_cmd_create(BT_HCI_OP_READ_RSSI, sizeof(*cp));
+    if (!buf) {
+        LOG_ERR("Unable to allocate command buffer\n");
+        return -ENOBUFS;
+    }
+
+    cp = net_buf_add(buf, sizeof(*cp));
+    cp->handle = sys_cpu_to_le16(conn_handle);
+
+    err = bt_hci_cmd_send_sync(BT_HCI_OP_READ_RSSI, buf, &rsp);
+    if (err) {
+        uint8_t reason = rsp ?
+            ((struct bt_hci_rp_read_rssi *)rsp->data)->status : 0;
+        LOG_ERR("Read RSSI err: %d reason 0x%02x\n", err, reason);
+        return err;
+    }
+
+    rp = (void *)rsp->data;
+    *rssi = rp->rssi;
+
+    net_buf_unref(rsp);
+	return err;
+}
+
 
 
 int nus_ble_init(void)

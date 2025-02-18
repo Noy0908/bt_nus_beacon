@@ -124,8 +124,6 @@ struct uart_cmd_rsp_t {
 // extern struct k_fifo fifo_uart_tx_data;
 extern struct k_fifo fifo_uart_rx_data;
 
-extern bool name_changed;    
-
 extern int uart_send_data(struct uart_data_t *tx);
 
 extern void handle_uart_data(struct uart_data_t *uart_data);

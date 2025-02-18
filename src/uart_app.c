@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <uart_async_adapter.h>
-#include <bluetooth/services/nus.h>
+// #include <bluetooth/services/nus.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/types.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/sys/reboot.h>
 
 #include "uart_app.h"
 #include "ble_app.h"
@@ -14,6 +16,7 @@
 
 LOG_MODULE_DECLARE(peripheral_uart);
 
+#define BT_MAC_ADDR_SIZE 	6
 
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(nordic_nus_uart));
 static struct k_work_delayable uart_work;
@@ -28,8 +31,6 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 #endif
 
 
-
-bool name_changed = false;
 uint8_t device_state = 0;
 
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
@@ -188,59 +189,187 @@ int uart_send_data(struct uart_data_t *tx)
     return err; 
 }
 
-static void update_adv_payload(struct uart_cmd_rsp_t * uart_data)
+static void update_adv_payload(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 {
-	LOG_INF("Update advertising data");
+	if(uart_data->len)	//write command
+	{
+		LOG_INF("Update advertising data");
+		int16_t err = 0;
 
-	if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
-		LOG_WRN("Input string too long. Truncating...");
+		if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
+			LOG_WRN("Input string too long. Truncating...");
+		}
+
+		manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
+		LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
+		memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
+
+		err = update_advertising();
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_SET_ADV_PAYLOAD_CMD;
+		}
+		memcpy(response->data, &err, sizeof(err));
+		response->len = sizeof(err);
 	}
-
-	manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
-
-	LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
-
-	memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
-	// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
-	// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
-	// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-	// uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
-	// manuf_size += COMPANY_ID_SIZE;
-
-	update_advertising();
+	else	//read commmand
+	{
+		response->cmd = HOST_SET_ADV_PAYLOAD_CMD;
+		response->len = manuf_size;
+		memcpy(response->data, dynamic_manuf_data + COMPANY_ID_SIZE, manuf_size);
+	}
 }
 
-static int set_passkey(struct uart_cmd_rsp_t * uart_data)
+static void force_disconnect_ble(struct uart_cmd_rsp_t *response)
+{
+	int16_t err = disconnect_ble();
+	if(err)
+	{
+		response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		LOG_WRN("Failed to disconnect BLE connection: %d", err);
+	}
+	else
+	{
+		response->cmd = HOST_DISCONN_BLE_CMD;
+	}
+	response->len = sizeof(err);
+	memcpy(response->data, &err, sizeof(err));
+}
+
+static void set_passkey(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 { 
+	int16_t err = 0;
 	if (uart_data->len != PASSKEY_ENTRY_LENGTH) {
 		LOG_WRN("Invalid passkey length");
-		return -EINVAL;
+		err = -EINVAL;
+	}
+	else
+	{
+		passkey = strtoul(uart_data->data, NULL, 10);
+		// memcpy(&passkey, uart_data->data, sizeof(passkey));
+		LOG_INF("Passkey set to: %06u", passkey);
+		err = bt_passkey_entry(passkey);
 	}
 
-	passkey = strtoul(uart_data->data, NULL, 10);
-	// memcpy(&passkey, uart_data->data, sizeof(passkey));
-	LOG_INF("Passkey set to: %06u", passkey);
-	return bt_passkey_entry(passkey);
+	if(err)
+	{
+		response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+	}
+	else
+	{
+		response->cmd = HOST_SET_PASSKEY_CMD;
+	}
+	memcpy(response->data, &err, sizeof(err));
+	response->len = sizeof(err);
 }
 
-
-static void set_device_name(struct uart_cmd_rsp_t * uart_data)
+static void uart_set_mac_address(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 {
-	if (uart_data->len > MAX_NAME_LEN) {
-		LOG_WRN("Device name too long. Max length is 15 characters.");
-    }
-
-	uint8_t name_len = MIN(uart_data->len, MAX_NAME_LEN);
-	memcpy(device_name, uart_data->data, name_len);
-	device_name[name_len] = '\0';
-	name_changed = true;
-	LOG_INF("Device name set to: %s", device_name);
-	bt_set_name(device_name);
-	update_advertising();
+	if(uart_data->len)		//write command
+	{
+		int16_t err = set_ble_mac_address(uart_data->data, uart_data->len);
+		
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_SET_BLE_MAC_ADDRESS_CMD;
+		}
+		memcpy(response->data, &err, sizeof(err));
+		response->len = sizeof(err);
+	}
+	else			//read command
+	{
+		response->cmd = HOST_SET_BLE_MAC_ADDRESS_CMD;
+		response->len = BT_MAC_ADDR_SIZE;
+		get_ble_mac_address(response->data);
+	}
 }
 
 
-static void uart_send_response(enum uart_cmd_type cmd, void *data, uint16_t len)
+static void set_device_name(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t * response)
+{
+	int16_t err = 0;
+
+	if(uart_data->len)		//write command
+	{
+		if (uart_data->len > MAX_NAME_LEN) {
+			LOG_WRN("Device name too long. Max length is 15 characters.");
+		}
+	
+		uint8_t name_len = MIN(uart_data->len, MAX_NAME_LEN);
+		memcpy(device_name, uart_data->data, name_len);
+		device_name[name_len] = '\0';
+		LOG_INF("Device name set to: %s", device_name);
+		err = set_ble_device_name(device_name);
+		err += update_advertising();
+	
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_SET_DEVICE_NAME_CMD;
+		}
+		memcpy(response->data, &err, sizeof(err));
+		response->len = sizeof(err);
+	}
+	else			//read command
+	{
+		response->cmd = HOST_SET_DEVICE_NAME_CMD;
+		response->len = strlen(device_name);
+		memcpy(response->data, device_name, response->len);
+	}
+	
+}
+
+static int read_device_info(struct uart_cmd_rsp_t *response)
+{
+	uint8_t len = 0;
+	uint8_t val[BT_MAC_ADDR_SIZE] = {0};
+
+	response->cmd = HOST_READ_DEVICE_INFO_CMD;
+	memcpy(response->data, device_name, strlen(device_name));
+	len += strlen(device_name);
+	
+	memcpy(&response->data[len], CONFIG_FW_VERSION, strlen(CONFIG_FW_VERSION));
+	len += strlen(CONFIG_FW_VERSION);
+
+	get_ble_mac_address(val);
+	memcpy(&response->data[len], val, sizeof(val));
+	len += sizeof(val);
+
+	response->len = len;
+	return 0;
+}
+
+static void read_ble_rssi(struct uart_cmd_rsp_t *response)
+{
+	int8_t rssi;
+	int16_t err = read_conn_rssi(&rssi);
+	if(err)
+	{
+		response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		memcpy(response->data, &err, sizeof(err));
+		response->len = sizeof(err);
+	}
+	else
+	{
+		response->cmd = HOST_READ_BLE_RSSI_CMD;
+		response->data[0] = rssi;
+		response->len = sizeof(rssi);
+	}
+}
+
+
+static void uart_send_response(struct uart_cmd_rsp_t response)
 {
 	struct uart_data_t *response_payload = k_malloc(sizeof(*response_payload));
 	if (response_payload) {
@@ -249,20 +378,30 @@ static void uart_send_response(enum uart_cmd_type cmd, void *data, uint16_t len)
 		LOG_WRN("Not able to allocate UART send buffer");
 	}
 
-	response_payload->data[response_payload->len++] = cmd;
-	response_payload->data[response_payload->len++] = len >> 8;
-	response_payload->data[response_payload->len++] = len & 0xFF;
-	memcpy(&response_payload->data[response_payload->len], data, len);
-	response_payload->len += len;
+	response_payload->data[response_payload->len++] = response.cmd;
+	response_payload->data[response_payload->len++] = response.len >> 8;
+	response_payload->data[response_payload->len++] = response.len & 0xFF;
+	memcpy(&response_payload->data[response_payload->len], response.data, response.len);
+	response_payload->len += response.len;
 
 	uart_send_data(response_payload);
+}
+
+static void reset_device(void)
+{
+	struct uart_cmd_rsp_t response = {0};
+	response.cmd =	HOST_RESET_DEVICE_CMD;
+	response.len = 2;
+	response.data[0] = 0;
+	uart_send_response(response);
+	k_sleep(K_MSEC(100));
+	sys_reboot(SYS_REBOOT_COLD);
 }
 
 
 void handle_uart_data(struct uart_data_t * uart_data)
 {
-    int err = 0;
-	// struct uart_cmd_rsp_t response = {0};
+	struct uart_cmd_rsp_t response = {0};
 
     struct uart_cmd_rsp_t command = {0};
 	command.cmd = uart_data->data[0];
@@ -278,7 +417,9 @@ void handle_uart_data(struct uart_data_t * uart_data)
     switch (command.cmd)
     {
     case HOST_UART_PING_CMD:
-        uart_send_response(HOST_UART_PING_CMD, &device_state, sizeof(device_state));
+		response.cmd = HOST_UART_PING_CMD;
+		response.len = sizeof(device_state);
+		response.data[0] = device_state;
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
     case HOST_SEND_NUS_DATA_CMD:
@@ -299,31 +440,15 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_SEND_NUS_DATA_CMD");
         break;
     case HOST_SET_ADV_PAYLOAD_CMD:
-        update_adv_payload(&command);
+        update_adv_payload(&command, &response);
         LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
         break;
     case HOST_DISCONN_BLE_CMD:
-        err = disconnect_ble();
-		if(err)
-		{
-			uart_send_response(HOST_COMMAND_ERROR_CODE_CMD, &err, sizeof(err));
-		}
-		else
-		{
-			uart_send_response(HOST_DISCONN_BLE_CMD, &err, sizeof(err));
-		}
+		force_disconnect_ble(&response);
         LOG_INF("Received command HOST_DISCONN_BLE_CMD");
         break;
     case HOST_SET_PASSKEY_CMD:
-        err = set_passkey(&command);
-		if(err)
-		{
-			uart_send_response(HOST_COMMAND_ERROR_CODE_CMD, &err, sizeof(err));
-		}
-		else
-		{
-			uart_send_response(HOST_SET_PASSKEY_CMD, &err, sizeof(err));
-		}
+        set_passkey(&command, &response);
         LOG_INF("Received command HOST_SET_PASSKEY_CMD");
         break; 
     case HOST_SET_UART_BAUDRATE_CMD:
@@ -331,19 +456,11 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
         break;
     case HOST_SET_BLE_MAC_ADDRESS_CMD:
-        err = set_ble_mac_address(command.data, command.len);
-		if(err)
-		{
-			uart_send_response(HOST_COMMAND_ERROR_CODE_CMD, &err, sizeof(err));
-		}
-		else
-		{
-			uart_send_response(HOST_SET_BLE_MAC_ADDRESS_CMD, &err, sizeof(err));
-		}
+        uart_set_mac_address(&command, &response);
         LOG_INF("Received command HOST_SET_BLE_MAC_ADDRESS_CMD");
         break;
     case HOST_READ_DEVICE_INFO_CMD:
-        // read_device_info();
+        read_device_info(&response);
         LOG_INF("Received command HOST_READ_DEVICE_INFO_CMD");
         break;
     case HOST_ERASE_BOND_DEVICE_CMD:
@@ -351,23 +468,23 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_ERASE_BOND_DEVICE_CMD");
         break;
     case HOST_RESET_DEVICE_CMD:
-        // reset_device();
+        reset_device();
         LOG_INF("Received command HOST_RESET_DEVICE_CMD");
         break;
     case HOST_READ_BLE_RSSI_CMD:
-        // read_ble_rssi();
+        read_ble_rssi(&response);
         LOG_INF("Received command HOST_READ_BLE_RSSI_CMD");
         break;
 	case HOST_SET_DEVICE_NAME_CMD:
-		set_device_name(&command);
+		set_device_name(&command, &response);
 		LOG_INF("Received command HOST_SET_DEVICE_NAME_CMD");
 		break;
     default:
         LOG_WRN("Received unknown command");
         break;
-    }
+    }   
 
-    // uart_send_data(response_payload);           //send response to host mcu
+	uart_send_response(response);		//send response to host mcu
 }
 
 

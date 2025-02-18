@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(peripheral_uart);
 #define KEY_PASSKEY_ACCEPT 				DK_BTN1_MSK
 #define KEY_PASSKEY_REJECT 				DK_BTN2_MSK
 
-#define FW_VERSION	 					"1.0.0"
+
 
 
 void error(void)
@@ -62,7 +62,7 @@ int main(void)
 	int blink_status = 0;
 	int err = 0;
 
-	LOG_INF("NUS Beacon sample started, the version is %s", FW_VERSION);
+	LOG_INF("NUS Beacon sample started, the version is %s", CONFIG_FW_VERSION);
 
 	configure_gpio();
 

@@ -8,6 +8,12 @@ source "Kconfig.zephyr"
 
 menu "Nordic UART BLE GATT service with beacon sample"
 
+config FW_VERSION
+	string "firmware version"
+	default "1.0.0"
+	help
+	  Application firmware version. 
+
 config BT_NUS_CRLF_UART_TERMINATION
 	bool "Use CR or LF to terminate UART transactions"
 	default y
