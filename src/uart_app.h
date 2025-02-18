@@ -95,6 +95,11 @@ enum uart_cmd_type {
 	 */
     HOST_SET_DEVICE_NAME_CMD,
 	/**
+	 * @brief host commands excute failed .
+	 * response with SUCCESS or ERROR.
+	 */
+    HOST_COMMAND_ERROR_CODE_CMD,
+	/**
 	 * @brief unused cmd, reserved.
 	 *
 	 */

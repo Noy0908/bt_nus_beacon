@@ -36,8 +36,12 @@ extern int nus_ble_init(void);
 
 extern int update_advertising(void);
 
+extern int disconnect_ble(void);
+
+extern int set_ble_mac_address(uint8_t  *val, uint8_t len);
+
 #if defined(CONFIG_BT_NUS_SECURITY_ENABLED)
-void bt_passkey_entry(unsigned int passkey);
+int bt_passkey_entry(unsigned int passkey);
 #endif
 
 

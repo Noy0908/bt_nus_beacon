@@ -204,9 +204,9 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
 	.pairing_failed = pairing_failed
 };
 
-void bt_passkey_entry(unsigned int passkey)
+int bt_passkey_entry(unsigned int passkey)
 {
-	bt_conn_auth_passkey_entry(current_conn, passkey);
+	return bt_conn_auth_passkey_entry(current_conn, passkey);
 }
 #else
 static struct bt_conn_auth_cb conn_auth_callbacks;
@@ -347,6 +347,41 @@ void ble_send_uart_data(struct uart_data_t * uart_data)
 	}
 }
 
+int disconnect_ble(void)
+{ 
+	int err = 0;
+	if (current_conn) {
+		err = bt_conn_disconnect(current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+		if (err) {
+			LOG_ERR("Failed to disconnect Bluetooth link (err %d)\n", err);
+		}
+	}
+	else
+	{
+		err = -ENOTCONN;
+	}
+	return err;
+}
+
+
+int set_ble_mac_address(uint8_t  *val, uint8_t len)
+{
+	if (len != BT_ADDR_SIZE) {
+		LOG_WRN("Invalid passkey length");
+		return -EINVAL;
+	}
+
+	bt_addr_le_t custom_addr = {
+		.type = BT_ADDR_LE_RANDOM,
+	};
+	memcpy(custom_addr.a.val, val, sizeof(custom_addr.a.val));
+
+	int err = bt_id_create(&custom_addr, NULL);
+	if (err) {
+		LOG_ERR("Failed to set custom MAC address (err %d)\n", err);
+	}
+	return err;
+}
 
 
 int nus_ble_init(void)
