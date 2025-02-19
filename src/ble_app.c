@@ -102,6 +102,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	current_conn = bt_conn_ref(conn);
 
 	dk_set_led_on(CON_STATUS_LED);
+
+	uart_send_URC("CONNECTED", strlen("CONNECTED"));
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -122,7 +124,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		current_conn = NULL;
 		dk_set_led_off(CON_STATUS_LED);
 	}
+	uart_send_URC("DISCONNECTED", strlen("DISCONNECTED"));
 }
+
 
 #ifdef CONFIG_BT_NUS_SECURITY_ENABLED
 static void security_changed(struct bt_conn *conn, bt_security_t level,
@@ -263,6 +267,19 @@ static struct bt_nus_cb nus_cb = {
 	.received = bt_receive_cb,
 };
 
+
+bool is_ble_connected(void)
+{
+	if (current_conn) {
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+
 int update_advertising(void)
 {
 	int err = 0;
@@ -402,7 +419,11 @@ int get_ble_mac_address(uint8_t *val)
 
 	bt_id_get(addrs, &count);
 	if (count > 0) {
-		memcpy(val, addrs[0].a.val, sizeof(addrs[0].a.val));
+		for(uint8_t i = 0; i < BT_ADDR_SIZE; i++)
+		{
+			*(val + i) = addrs[0].a.val[BT_ADDR_SIZE -1 -i];
+		}
+		// memcpy(val, addrs[0].a.val, sizeof(addrs[0].a.val));
 		return 0;
 	}
 	return -ENODATA;

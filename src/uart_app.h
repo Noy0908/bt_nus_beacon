@@ -95,10 +95,15 @@ enum uart_cmd_type {
 	 */
     HOST_SET_DEVICE_NAME_CMD,
 	/**
+	 * @brief slave send URC to host .
+	 * response with SUCCESS or ERROR.
+	 */
+    HOST_REPORT_URC_CMD = 0xFE,
+	/**
 	 * @brief host commands excute failed .
 	 * response with SUCCESS or ERROR.
 	 */
-    HOST_COMMAND_ERROR_CODE_CMD,
+    HOST_COMMAND_ERROR_CODE_CMD = 0xFF,
 	/**
 	 * @brief unused cmd, reserved.
 	 *
@@ -125,6 +130,8 @@ struct uart_cmd_rsp_t {
 extern struct k_fifo fifo_uart_rx_data;
 
 extern int uart_send_data(struct uart_data_t *tx);
+
+extern void uart_send_URC(char *data, uint16_t len);
 
 extern void handle_uart_data(struct uart_data_t *uart_data);
 

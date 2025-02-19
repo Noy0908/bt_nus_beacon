@@ -25,7 +25,7 @@
 
 extern struct k_sem ble_init_ok;
 
-extern struct bt_conn *current_conn;
+// extern struct bt_conn *current_conn;
 
 extern uint8_t manuf_size;
 extern unsigned int passkey;
@@ -33,6 +33,8 @@ extern char device_name[MAX_NAME_LEN+1];
 extern uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE];
 
 extern int nus_ble_init(void);
+
+extern bool is_ble_connected(void);
 
 extern int update_advertising(void);
 
