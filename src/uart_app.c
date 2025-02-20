@@ -438,6 +438,23 @@ void uart_send_URC(uint8_t data, uint16_t len)
 }
 
 
+// set device state
+void set_device_status(uint8_t bitmask, int value) {
+    if (value == 1) {
+        device_state |= bitmask;  // set bit to 1
+    } else {
+        device_state &= ~bitmask; // set bit to 0
+    }
+}
+
+// get device state
+uint8_t get_device_status(void) {
+    // return (device_state & bitmask) ? 1 : 0;  
+	return device_state;
+}
+
+
+
 void handle_uart_data(struct uart_data_t * uart_data)
 {
 	struct uart_cmd_rsp_t response = {0};
@@ -458,7 +475,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
     case HOST_UART_PING_CMD:
 		response.cmd = HOST_UART_PING_CMD;
 		response.len = sizeof(device_state);
-		response.data[0] = device_state;
+		response.data[0] = get_device_status();
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
     case HOST_SEND_NUS_DATA_CMD:
@@ -594,6 +611,7 @@ int uart_init(void)
 
 	// uart_send_URC("READY", strlen("READY"));
 	uart_send_URC(BLE_READY_URC, BLE_URC_LENGTH);
+	set_device_status(STATUS_NUS_READY, 1);    //set the device status to ready
 
 	return err;
 }

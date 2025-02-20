@@ -107,6 +107,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	// uart_send_URC("CONNECTED", strlen("CONNECTED"));
 	uart_send_URC(BLE_CONNECTED_URC, BLE_URC_LENGTH);
+	set_device_status(STATUS_CONNECTED, 1);    //set the device status to connected
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -129,6 +130,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	}
 	// uart_send_URC("DISCONNECTED", strlen("DISCONNECTED"));
 	uart_send_URC(BLE_DISCONNECTED_URC, BLE_URC_LENGTH);
+	set_device_status(STATUS_CONNECTED, 0);    //set the device status to disconnected
 }
 
 

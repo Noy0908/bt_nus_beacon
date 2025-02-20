@@ -14,6 +14,17 @@
 #define UART_WAIT_FOR_RX            CONFIG_BT_NUS_UART_RX_WAIT_TIME
 
 
+/** device status bit */
+#define STATUS_CONNECTED   (1 << 0)  // bit0:(1) Connected  	(0) Disconnected
+#define STATUS_PAIRED      (1 << 1)  // bit1:(1) Paired  		(0) Unpaired
+#define STATUS_NUS_READY   (1 << 2)  // bit2:(1) NUS Ready		(0) NUT Not Ready
+#define STATUS_ADVERTISING (1 << 3)  // bit3:(1) Advertising 	(0) not advertising
+#define STATUS_BONDED      (1 << 4)  // bit4:(1) stored bond 	(0) no bond
+
+
+
+
+
 /**
  * @brief Types of uart commands
  *
@@ -132,6 +143,10 @@ extern struct k_fifo fifo_uart_rx_data;
 extern int uart_send_data(struct uart_data_t *tx);
 
 extern void uart_send_URC(uint8_t data, uint16_t len);
+
+extern void set_device_status(uint8_t bitmask, int value);
+
+extern uint8_t get_device_status(void);
 
 extern void handle_uart_data(struct uart_data_t *uart_data);
 
