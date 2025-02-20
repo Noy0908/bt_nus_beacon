@@ -28,6 +28,8 @@ extern "C" {
 #define ENOCMD  150          /**< Invalid Command */
 #define EOPFAIL 151          /**< Operation failed */
 #define ENORDY  152          /**< Trying sending data when NUS is not ready */
+
+// #define EPERM 1		   /* Not owner */
 // #define ENOENT 2        /**< No such file or directory */
 // #define ESRCH 3         /**< No such context */
 // #define EINTR 4         /**< Interrupted system call */

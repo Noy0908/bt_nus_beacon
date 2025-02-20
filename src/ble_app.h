@@ -23,6 +23,17 @@
 #define CON_STATUS_LED 					DK_LED2
 
 
+/** unsolicated response */
+#define BLE_URC_LENGTH				    0x01        //length of unsolicated response
+
+#define BLE_READY_URC				    0x01        //ble ready after device reboot
+#define BLE_CONNECTED_URC				0x02        //BLE connect successfully
+#define BLE_DISCONNECTED_URC			0x03        //BLE disconnect
+
+
+
+
+
 extern struct k_sem ble_init_ok;
 
 // extern struct bt_conn *current_conn;

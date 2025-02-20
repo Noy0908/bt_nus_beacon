@@ -131,7 +131,7 @@ extern struct k_fifo fifo_uart_rx_data;
 
 extern int uart_send_data(struct uart_data_t *tx);
 
-extern void uart_send_URC(char *data, uint16_t len);
+extern void uart_send_URC(uint8_t data, uint16_t len);
 
 extern void handle_uart_data(struct uart_data_t *uart_data);
 

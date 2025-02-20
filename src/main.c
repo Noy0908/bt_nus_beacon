@@ -20,6 +20,7 @@
 
 #include "ble_app.h"
 #include "uart_app.h"
+#include "nus_setting_app.h"
 
 LOG_MODULE_REGISTER(peripheral_uart);
 
@@ -65,6 +66,8 @@ int main(void)
 	LOG_INF("NUS Beacon sample started, the version is %s", CONFIG_FW_VERSION);
 
 	configure_gpio();
+
+	nus_settings_init();
 
 	err = uart_init();
 	if (err) {

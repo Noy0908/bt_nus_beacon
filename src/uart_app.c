@@ -12,6 +12,7 @@
 
 #include "uart_app.h"
 #include "ble_app.h"
+#include "nus_setting_app.h"
 #include "error_code.h"
 
 LOG_MODULE_DECLARE(peripheral_uart);
@@ -281,8 +282,8 @@ static void uart_set_mac_address(struct uart_cmd_rsp_t * uart_data, struct uart_
 {
 	if(uart_data->len)		//write command
 	{
-		int16_t err = set_ble_mac_address(uart_data->data, uart_data->len);
-		
+		// int16_t err = set_ble_mac_address(uart_data->data, uart_data->len);
+		int16_t err = save_mac_address(uart_data->data, uart_data->len);
 		if(err)
 		{
 			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
@@ -426,12 +427,13 @@ static void reset_device(void)
 }
 
 
-void uart_send_URC(char *data, uint16_t len)
+void uart_send_URC(uint8_t data, uint16_t len)
 {
 	struct uart_cmd_rsp_t response = {0};
 	response.cmd = HOST_REPORT_URC_CMD;
 	response.len = len;
-	memcpy(response.data, data, len);
+	// memcpy(response.data, data, len);
+	response.data[0] = data;
 	uart_send_response(response);
 }
 
@@ -590,7 +592,8 @@ int uart_init(void)
 		k_free(rx);
 	}
 
-	uart_send_URC("READY", strlen("READY"));
+	// uart_send_URC("READY", strlen("READY"));
+	uart_send_URC(BLE_READY_URC, BLE_URC_LENGTH);
 
 	return err;
 }

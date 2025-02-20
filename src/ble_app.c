@@ -9,9 +9,11 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/types.h>
+#include <zephyr/bluetooth/hci_vs.h>
 
 #include "ble_app.h"
 #include "uart_app.h"
+#include "nus_setting_app.h"
 #include "error_code.h"
 
 LOG_MODULE_DECLARE(peripheral_uart);
@@ -103,7 +105,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 
 	dk_set_led_on(CON_STATUS_LED);
 
-	uart_send_URC("CONNECTED", strlen("CONNECTED"));
+	// uart_send_URC("CONNECTED", strlen("CONNECTED"));
+	uart_send_URC(BLE_CONNECTED_URC, BLE_URC_LENGTH);
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -124,7 +127,8 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		current_conn = NULL;
 		dk_set_led_off(CON_STATUS_LED);
 	}
-	uart_send_URC("DISCONNECTED", strlen("DISCONNECTED"));
+	// uart_send_URC("DISCONNECTED", strlen("DISCONNECTED"));
+	uart_send_URC(BLE_DISCONNECTED_URC, BLE_URC_LENGTH);
 }
 
 
@@ -391,7 +395,7 @@ int set_ble_device_name(char *name)
 	return err;
 }
 
-
+#if 1
 int set_ble_mac_address(uint8_t  *val, uint8_t len)
 {
 	if (len != BT_ADDR_SIZE) {
@@ -410,6 +414,41 @@ int set_ble_mac_address(uint8_t  *val, uint8_t len)
 	}
 	return err;
 }
+#else
+int set_ble_mac_address(uint8_t  *val, uint8_t len)
+{
+	if (len != BT_ADDR_SIZE) {
+		LOG_WRN("Invalid passkey length");
+		return -EINVAL;
+	}
+
+	int err = 0;
+	struct net_buf *buf;
+	struct bt_hci_cp_vs_write_bd_addr *cp;
+
+	buf = bt_hci_cmd_create(BT_HCI_OP_VS_WRITE_BD_ADDR, sizeof(*cp));
+	if (!buf) {
+		return -ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	memcpy(cp->bdaddr.val, val, BT_ADDR_SIZE);
+
+	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_WRITE_BD_ADDR, buf, NULL);
+	if (err) {
+		LOG_ERR("Failed to set custom MAC address (err %d)\n", err);
+		return err;
+	}
+
+	err = bt_setup_public_id_addr();
+	if (err) {
+		LOG_ERR("Failed to set public address (err %d)\n", err);
+		return err;
+	}
+
+	return err;
+}
+#endif
 
 
 int get_ble_mac_address(uint8_t *val)
@@ -419,11 +458,11 @@ int get_ble_mac_address(uint8_t *val)
 
 	bt_id_get(addrs, &count);
 	if (count > 0) {
-		for(uint8_t i = 0; i < BT_ADDR_SIZE; i++)
-		{
-			*(val + i) = addrs[0].a.val[BT_ADDR_SIZE -1 -i];
-		}
-		// memcpy(val, addrs[0].a.val, sizeof(addrs[0].a.val));
+		// for(uint8_t i = 0; i < BT_ADDR_SIZE; i++)
+		// {
+		// 	*(val + i) = addrs[0].a.val[BT_ADDR_SIZE -1 -i];
+		// }
+		memcpy(val, addrs[0].a.val, sizeof(addrs[0].a.val));
 		return 0;
 	}
 	return -ENODATA;
@@ -486,6 +525,12 @@ int nus_ble_init(void)
 
 	k_work_init(&advertise_start_work, advertise_start_without_sd);
 
+	uint8_t *mac_val = get_mac_address();
+	if(mac_val && mac_val[0] != 0)
+	{
+		set_ble_mac_address(mac_val, BT_ADDR_SIZE);
+	}
+
     err = bt_enable(NULL);
 	if (err) {
 		printk("Failed to enable ble stack!.\n");
@@ -499,11 +544,12 @@ int nus_ble_init(void)
 
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
-		if(bt_get_name())
-		{
-			memset(device_name, 0, sizeof(device_name));
-			memcpy(device_name, bt_get_name(), strlen(bt_get_name()));
-		}
+		// if(bt_get_name())
+		// {
+		// 	memset(device_name, 0, sizeof(device_name));
+		// 	memcpy(device_name, bt_get_name(), strlen(bt_get_name()));
+		// }
+		
 	}
 
 	err = bt_nus_init(&nus_cb);
