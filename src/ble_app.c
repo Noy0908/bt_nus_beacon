@@ -85,6 +85,8 @@ static void advertise_start_without_sd(struct k_work *work)
 		return;
 	}
 
+	set_device_status(STATUS_ADVERTISING, 1);    //set the device status to advertising
+
 	LOG_INF("Advertising successfully started");
 }
 
@@ -108,6 +110,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	// uart_send_URC("CONNECTED", strlen("CONNECTED"));
 	uart_send_URC(BLE_CONNECTED_URC, BLE_URC_LENGTH);
 	set_device_status(STATUS_CONNECTED, 1);    //set the device status to connected
+	set_device_status(STATUS_ADVERTISING, 0);    //clean the advertising status
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
@@ -191,6 +194,7 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
+	set_device_status(STATUS_PAIRED | STATUS_BONDED, 1);    //set the device status to paired and bonded
 }
 
 
@@ -468,6 +472,15 @@ int get_ble_mac_address(uint8_t *val)
 		return 0;
 	}
 	return -ENODATA;
+}
+
+int erase_bond_peer(void)
+{
+	int err = bt_unpair(BT_ID_DEFAULT, BT_ADDR_LE_ANY);
+	if (err) {
+		LOG_INF("Cannot delete bond (err: %d)\n", err);
+	}
+	return err;
 }
 
 

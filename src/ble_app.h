@@ -51,6 +51,8 @@ extern int update_advertising(void);
 
 extern int disconnect_ble(void);
 
+extern int erase_bond_peer(void);
+
 extern int set_ble_device_name(char *name);
 
 extern int set_ble_mac_address(uint8_t  *val, uint8_t len);

@@ -374,6 +374,25 @@ static int read_device_info(struct uart_cmd_rsp_t *response)
 	return 0;
 }
 
+static void erase_bond_device(struct uart_cmd_rsp_t *response)
+{
+	int16_t err = erase_bond_peer();
+	if(err)
+	{
+		response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+	}
+	else
+	{
+		response->cmd = HOST_ERASE_BOND_DEVICE_CMD;
+		set_device_status(STATUS_PAIRED | STATUS_BONDED, 0);    //clean the paired device status
+	}
+	// memcpy(response->data, &err, sizeof(err));
+	response->data[0] = (err >> 8) & 0xFF;
+	response->data[1] = err & 0xFF;
+	response->len = sizeof(err);	
+}
+
+
 static void read_ble_rssi(struct uart_cmd_rsp_t *response)
 {
 	int8_t rssi;
@@ -520,7 +539,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_READ_DEVICE_INFO_CMD");
         break;
     case HOST_ERASE_BOND_DEVICE_CMD:
-        // erase_bond_device();
+        erase_bond_device(&response);
         LOG_INF("Received command HOST_ERASE_BOND_DEVICE_CMD");
         break;
     case HOST_RESET_DEVICE_CMD:
