@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <uart_async_adapter.h>
-// #include <bluetooth/services/nus.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
@@ -33,6 +33,8 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 
 
 uint8_t device_state = 0;
+
+
 
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
 {
@@ -278,6 +280,39 @@ static void set_passkey(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t
 	response->len = sizeof(err);
 }
 
+
+static void set_uart_baudrate(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
+{
+	int16_t err = 0;
+	if(uart_data->len)
+	{
+		err = save_new_baudrate(uart_data->data, uart_data->len);
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_SET_UART_BAUDRATE_CMD;
+		}
+
+		response->data[0] = (err >> 8) & 0xFF;
+		response->data[1] = err & 0xFF;
+		response->len = sizeof(err);
+	}
+	else			//read command
+	{
+		response->cmd = HOST_SET_UART_BAUDRATE_CMD;
+		uint32_t baudrate = get_uart_baudrate();
+		response->data[0] = baudrate>>24 & 0xFF;
+		response->data[1] = baudrate>>16 & 0xFF;
+		response->data[2] = baudrate>>8 & 0xFF;
+		response->data[3] = baudrate & 0xFF;
+		response->len = sizeof(baudrate);
+	}
+}
+
+
 static void uart_set_mac_address(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 {
 	if(uart_data->len)		//write command
@@ -473,7 +508,6 @@ uint8_t get_device_status(void) {
 }
 
 
-
 void handle_uart_data(struct uart_data_t * uart_data)
 {
 	struct uart_cmd_rsp_t response = {0};
@@ -527,7 +561,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_SET_PASSKEY_CMD");
         break; 
     case HOST_SET_UART_BAUDRATE_CMD:
-        // set_uart_baudrate(&command);
+        set_uart_baudrate(&command, &response);
         LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
         break;
     case HOST_SET_BLE_MAC_ADDRESS_CMD:
@@ -566,6 +600,23 @@ void handle_uart_data(struct uart_data_t * uart_data)
 }
 
 
+static void reconfigure_uart(const struct device * dev, uint32_t new_value)
+{
+	struct uart_config cfg = {
+        .baudrate = new_value,
+        .parity = UART_CFG_PARITY_NONE,
+        .stop_bits = UART_CFG_STOP_BITS_1,
+        .data_bits = UART_CFG_DATA_BITS_8,
+        .flow_ctrl = UART_CFG_FLOW_CTRL_NONE
+    };
+    int err = uart_configure(dev, &cfg);
+	if(err)
+	{
+		LOG_ERR("Failed to reconfigure UART baudrate: %d", err);
+	}
+ 	// NRF_UARTE0->BAUDRATE =  0x01D60000;
+}
+
 int uart_init(void)
 {
 	int err;
@@ -574,6 +625,8 @@ int uart_init(void)
 	if (!device_is_ready(uart)) {
 		return -ENODEV;
 	}
+	
+	reconfigure_uart(uart, get_uart_baudrate());
 
 	rx = k_malloc(sizeof(*rx));
 	if (rx) {
