@@ -31,7 +31,10 @@
 #define BLE_DISCONNECTED_URC			0x03        //BLE disconnect
 
 
-
+typedef struct {
+	uint8_t *data;
+	uint16_t length;
+} nus_data_t;
 
 
 extern struct k_sem ble_init_ok;
@@ -48,6 +51,8 @@ extern int nus_ble_init(void);
 extern bool is_ble_connected(void);
 
 extern int update_advertising(void);
+
+extern int ble_send_uart_data(nus_data_t * uart_data);
 
 extern int disconnect_ble(void);
 

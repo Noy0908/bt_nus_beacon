@@ -18,6 +18,12 @@
 
 LOG_MODULE_DECLARE(peripheral_uart);
 
+
+#define NUS_THREAD_STACK_SIZE               4096
+#define NUS_THREAD_PRIORITY 				7
+
+#define TX_QUEUE_COUNT						20
+
 K_SEM_DEFINE(ble_init_ok, 0, 1);
 
 static struct bt_conn *auth_conn;
@@ -318,57 +324,27 @@ int update_advertising(void)
 }
 
 
-// void ble_send_uart_data(struct uart_data_t * uart_data)
-// {
-// 	int err = 0;
+int ble_send_uart_data(nus_data_t * uart_data)
+{
+	int err = 0;
 
-// 	if (current_conn) {
-// 		/* In a connection - send data via NUS */
-// 		err = bt_nus_send(NULL, uart_data->data, uart_data->len);
-// 		if (err) {
-// 			LOG_WRN("Failed to send data over BLE connection: %d", err);
-// 		}
-// 	} else {
-// 		/* Not in a connection - update scan response data */
-// 		// if (uart_data->len < 2) {
-// 		// 	LOG_INF("Disable scan response");
-// 		// 	err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
-// 		// 	if (err != 0) {
-// 		// 		LOG_WRN("Faileed to update scan response dataq: %d", err);
-// 		// 	}
-// 		// } else 
-// 		{
-// 			LOG_INF("Update advertising data");
+	if (current_conn) 
+	{
+		/* In a connection - send data via NUS */
+		err = bt_nus_send(NULL, uart_data->data, uart_data->length);
+		if (err) {
+			LOG_WRN("Failed to send data over BLE connection: %d", err);
+		}
+	} 
+	else 
+	{
+		err = -ENOTCONN;
+		// LOG_WRN("Not in a connection, buffered data!");
+	}
 
-// 			if (uart_data->len > DYNAMIC_MANUF_DATA_SIZE - strlen(device_name)) {
-// 				LOG_WRN("Input string too long. Truncating...");
-// 			}
+	return err;
+}
 
-// 			manuf_size = MIN((uart_data->len), DYNAMIC_MANUF_DATA_SIZE - strlen(device_name));
-
-// 			LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
-
-// 			memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
-// 			// uint8_t manuf_ad_len = manuf_size + COMPANY_ID_SIZE;
-// 			// sd[0].data_len = manuf_size + COMPANY_ID_SIZE;
-// 			// err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-// 			uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
-// 			manuf_size += COMPANY_ID_SIZE;
-// 			struct bt_data new_ad[] = {
-// 				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
-// 				BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size),
-// 			};
-// 			err = bt_le_adv_update_data(new_ad, ARRAY_SIZE(new_ad), NULL, 0);
-// 			if (err != 0) {
-// 				LOG_WRN("Faileed to update adv dataq: %d", err);
-// 			}
-// 			else
-// 			{
-// 				LOG_INF("Update advertise payload[%d]: %s\n", manuf_size, dynamic_manuf_data + COMPANY_ID_SIZE);
-// 			}
-// 		}
-// 	}
-// }
 
 int disconnect_ble(void)
 { 

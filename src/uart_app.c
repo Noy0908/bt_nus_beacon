@@ -18,12 +18,15 @@
 LOG_MODULE_DECLARE(peripheral_uart);
 
 #define BT_MAC_ADDR_SIZE 	6
+#define TX_QUEUE_COUNT		20
 
 static const struct device *uart = DEVICE_DT_GET(DT_CHOSEN(nordic_nus_uart));
 static struct k_work_delayable uart_work;
 
 K_FIFO_DEFINE(fifo_uart_tx_data);
 K_FIFO_DEFINE(fifo_uart_rx_data);
+
+K_MSGQ_DEFINE(tx_send_queue, sizeof(nus_data_t), TX_QUEUE_COUNT, 4);
 
 #ifdef CONFIG_UART_ASYNC_ADAPTER
 UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
@@ -34,6 +37,7 @@ UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
 
 uint8_t device_state = 0;
 
+bool transparent_flag = false;
 
 
 static void uart_cb(const struct device *dev, struct uart_event *evt, void *user_data)
@@ -191,6 +195,7 @@ int uart_send_data(struct uart_data_t *tx)
     }
     return err; 
 }
+
 
 static void update_adv_payload(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 {
@@ -510,6 +515,40 @@ uint8_t get_device_status(void) {
 }
 
 
+void on_packet_nus_data(uint8_t *buffer, uint16_t length)
+{
+	int err;
+	nus_data_t send_buffer = {0};
+	
+	send_buffer.data = k_calloc(length+1, sizeof(uint8_t));
+	if (send_buffer.data != NULL) 
+	{
+		memcpy(send_buffer.data, buffer, length);		
+		send_buffer.length = length;
+
+		if(0 == k_msgq_num_free_get(&tx_send_queue))
+		{
+			/* message queue is full ,we have to delete the oldest data to reserve room for the new data */
+			nus_data_t data_buffer = {0};
+			k_msgq_get(&tx_send_queue, &data_buffer, K_NO_WAIT);
+			LOG_DBG("Droped data:[%d]:%s\n",data_buffer.length, data_buffer.data);
+			k_free(data_buffer.data);
+		}
+
+		/** send the uart data to tcp server*/
+		err = k_msgq_put(&tx_send_queue, &send_buffer, K_NO_WAIT);
+		if (err) {
+			LOG_ERR("Message sent error: %d", err);
+			k_free(send_buffer.data);
+		}
+	} 
+	else 
+	{
+		LOG_ERR("Memory not allocated!\n");
+	}
+}
+
+
 void handle_uart_data(struct uart_data_t * uart_data)
 {
 	struct uart_cmd_rsp_t response = {0};
@@ -534,20 +573,10 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
     case HOST_SEND_NUS_DATA_CMD:
-        // if (current_conn) 
-        // {
-        //     /* In a connection - send data via NUS */
-        //     err = bt_nus_send(NULL, cmd_rsp.data, cmd_rsp.len);
-        //     if (err) {
-        //         // uart_send_response(HOST_SEND_NUS_DATA_CMD, &err, sizeof(err));
-        //         LOG_WRN("Failed to send data over BLE connection: %d", err);
-        //     }
-	    // }
-        // else
-        // {
-        //     LOG_WRN("Not in a connection, buffered data!");
-        // }
-		// k_msgq_put();	//send data to ble
+		transparent_flag = true;
+		response.cmd = HOST_SEND_NUS_DATA_CMD;
+		response.len = 2;
+		response.data[0] = SUCCEED;
         LOG_INF("Received command HOST_SEND_NUS_DATA_CMD");
         break;
     case HOST_SET_ADV_PAYLOAD_CMD:
@@ -592,7 +621,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
 		break;
     default:
 		response.cmd = HOST_COMMAND_ERROR_CODE_CMD;
-		response.len = 1;
+		response.len = 2;
 		response.data[0] = ENOCMD;
 		LOG_WRN("Received unknown command");
         break;
