@@ -99,7 +99,7 @@ int16_t save_new_baudrate(uint8_t *data, uint8_t len)
 
 	new_baudrate = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
 	LOG_INF("Baudrate set to: %d", new_baudrate);
-	if(new_baudrate < 9600 || new_baudrate > 1000000)
+	if(new_baudrate < 1200 || new_baudrate > 1000000)
 	{
 		LOG_WRN("Invalid baudrate value!");
 		err = -EINVAL;
@@ -130,7 +130,7 @@ uint32_t get_uart_baudrate(void)
     }
     LOG_INF("get baudrate: %d\n", new_baudrate);
 
-	new_baudrate = ((new_baudrate > 9600 && new_baudrate < 1000000) ? new_baudrate : 9600);
+	new_baudrate = ((new_baudrate > 1200 && new_baudrate < 1000000) ? new_baudrate : 9600);
 	
     return new_baudrate;
 }

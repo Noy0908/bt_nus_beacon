@@ -442,9 +442,11 @@ static void read_ble_rssi(struct uart_cmd_rsp_t *response)
 	}
 	else
 	{
+		LOG_INF("BLE RSSI: %d", rssi);
 		response->cmd = HOST_READ_BLE_RSSI_CMD;
-		response->data[0] = rssi;
-		response->len = sizeof(rssi);
+		response->data[0] = (rssi >> 8) & 0xFF;
+		response->data[1] = rssi & 0xFF;
+		response->len = 2;
 	}
 }
 
