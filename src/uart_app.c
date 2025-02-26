@@ -622,7 +622,9 @@ void handle_uart_data(struct uart_data_t * uart_data)
     default:
 		response.cmd = HOST_COMMAND_ERROR_CODE_CMD;
 		response.len = 2;
-		response.data[0] = ENOCMD;
+		int16_t err = -ENOCMD;
+		response.data[0] = (err >> 8) & 0xFF;
+		response.data[1] = err & 0xFF;
 		LOG_WRN("Received unknown command");
         break;
     }   

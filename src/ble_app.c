@@ -152,6 +152,8 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (!err) {
+		uart_send_URC(BLE_PAIRED_URC, BLE_URC_LENGTH);
+		set_device_status(STATUS_PAIRED, 1);    //set the device status to paired and bonded
 		LOG_INF("Security changed: %s level %u", addr, level);
 	} else {
 		LOG_WRN("Security failed: %s level %u err %d %s", addr, level, err,
@@ -199,8 +201,13 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
+	uart_send_URC(BLE_PAIRED_URC, BLE_URC_LENGTH);
+	if(bonded)
+		set_device_status(STATUS_PAIRED | STATUS_BONDED, 1);    //set the device status to paired and bonded
+	else
+		set_device_status(STATUS_PAIRED, 1);    //set the device status to paired
+
 	LOG_INF("Pairing completed: %s, bonded: %d", addr, bonded);
-	set_device_status(STATUS_PAIRED | STATUS_BONDED, 1);    //set the device status to paired and bonded
 }
 
 

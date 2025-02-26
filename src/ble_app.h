@@ -29,6 +29,8 @@
 #define BLE_READY_URC				    0x01        //ble ready after device reboot
 #define BLE_CONNECTED_URC				0x02        //BLE connect successfully
 #define BLE_DISCONNECTED_URC			0x03        //BLE disconnect
+#define BLE_PAIRED_URC			        0x04        //BLE paired
+#define BLE_INCOMING_NUS_URC			0x05        //Received NUS data from app
 
 
 typedef struct {

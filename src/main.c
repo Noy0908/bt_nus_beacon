@@ -115,6 +115,7 @@ void ble_write_thread(void)
 
 	int ret = 0;
 	nus_data_t send_packet = {0};
+	static uint8_t resend_count = 0;
 	struct uart_data_t uart_data = {
 		.len = 0,
 	};
@@ -166,7 +167,8 @@ void ble_write_thread(void)
 				/* send successfully, delete the queue message and free memory */
 				k_msgq_get(&tx_send_queue, &send_packet, K_NO_WAIT);
 				k_free(send_packet.data);
-				LOG_DBG("Socket send [%d] successfully , the data is: \"%s\"\n",ret, send_packet.data);
+				resend_count = 0;
+				// LOG_HEXDUMP_INF(send_packet.data, send_packet.length, "NUS send:\n");
 			}
 			else if(ret == -ENOTCONN)
 			{
@@ -174,8 +176,11 @@ void ble_write_thread(void)
 			}
 			else
 			{
-				/* send failed, we need to resend it */
-				LOG_WRN("BLE send failed, will resend it.\n");
+				if(resend_count++ >= 3)
+				{
+					/* send failed, we need to wait more time */
+					LOG_WRN("BLE send failed, will resend it.\n");
+				}
 			}
 		}
 	}
