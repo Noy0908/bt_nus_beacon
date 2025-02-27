@@ -31,12 +31,13 @@
 #define BLE_DISCONNECTED_URC			0x03        //BLE disconnect
 #define BLE_PAIRED_URC			        0x04        //BLE paired
 #define BLE_INCOMING_NUS_URC			0x05        //Received NUS data from app
+#define BLE_ENTER_TRANSPARENT_MODE_URC	0x06        //the NRF5 device enter transparent mode successfully
 
 
-typedef struct {
-	uint8_t *data;
-	uint16_t length;
-} nus_data_t;
+// typedef struct {
+// 	uint8_t *data;
+// 	uint16_t length;
+// } nus_data_t;
 
 
 extern struct k_sem ble_init_ok;
@@ -50,11 +51,11 @@ extern uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE];
 
 extern int nus_ble_init(void);
 
-extern bool is_ble_connected(void);
+extern bool is_ble_paired(void);
 
 extern int update_advertising(void);
 
-extern int ble_send_uart_data(nus_data_t * uart_data);
+extern int ble_send_uart_data(uint8_t *buffer, uint16_t length);
 
 extern int disconnect_ble(void);
 

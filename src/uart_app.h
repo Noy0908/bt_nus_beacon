@@ -52,11 +52,6 @@ enum uart_cmd_type {
 	/**
 	 * @brief host set the advertisement payload.
      * response with NONE or ERROR.
-     * 
-     * Payload format:
-	 * 1 Byte: Tx power & preferred PHY in connection 
-     * 1 Byte: interval (20ms increment)
-     * 2 Byte: Manufacturer ID
      * 24 Bbytes: adv payload
 	 */
 	HOST_SET_ADV_PAYLOAD_CMD,
@@ -106,6 +101,15 @@ enum uart_cmd_type {
 	 */
     HOST_SET_DEVICE_NAME_CMD,
 	/**
+	 * @brief host set BLE parameter .
+	 * response with SUCCESS or ERROR.
+	 * 
+	 * parameter format:
+	 * 1 Byte: Tx power & preferred PHY in connection 
+     * 1 Byte: interval (20ms increment)
+	 */
+    HOST_SET_BLE_PARAMETER_CMD,
+	/**
 	 * @brief slave send URC to host .
 	 * response with SUCCESS or ERROR.
 	 */
@@ -146,13 +150,17 @@ extern bool transparent_flag;
 
 extern int uart_send_data(struct uart_data_t *tx);
 
+extern void uart_buffer_data(struct uart_data_t *tx);
+
+extern void clean_nus_buffer_data(void);
+
 extern void uart_send_URC(uint8_t data, uint16_t len);
 
 extern void set_device_status(uint8_t bitmask, int value);
 
 extern uint8_t get_device_status(void);
 
-extern void on_packet_nus_data(uint8_t *buffer, uint16_t length);
+// extern void on_packet_nus_data(uint8_t *buffer, uint16_t length);
 
 extern void handle_uart_data(struct uart_data_t *uart_data);
 

@@ -26,7 +26,7 @@ static struct k_work_delayable uart_work;
 K_FIFO_DEFINE(fifo_uart_tx_data);
 K_FIFO_DEFINE(fifo_uart_rx_data);
 
-K_MSGQ_DEFINE(tx_send_queue, sizeof(nus_data_t), TX_QUEUE_COUNT, 4);
+// K_MSGQ_DEFINE(tx_send_queue, sizeof(nus_data_t), TX_QUEUE_COUNT, 4);
 
 #ifdef CONFIG_UART_ASYNC_ADAPTER
 UART_ASYNC_ADAPTER_INST_DEFINE(async_adapter);
@@ -188,12 +188,49 @@ static bool uart_test_async_api(const struct device *dev)
 
 int uart_send_data(struct uart_data_t *tx)
 {
-    int err;
-    err = uart_tx(uart, tx->data, tx->len, SYS_FOREVER_MS);
-    if (err) {
-        k_fifo_put(&fifo_uart_tx_data, tx);
-    }
+    int err = 0;
+	if(tx)
+	{
+		err = uart_tx(uart, tx->data, tx->len, SYS_FOREVER_MS);
+		if (err) {
+			k_fifo_put(&fifo_uart_tx_data, tx);
+		}
+	}
+	else
+	{
+		struct uart_data_t *buf = k_fifo_get(&fifo_uart_tx_data, K_NO_WAIT);
+		if (!buf) {
+			return -ENOMEM;
+		}
+
+		err = uart_tx(uart, buf->data, buf->len, 0);
+		if (err) {
+			// k_fifo_put(&fifo_uart_tx_data, buf);
+			LOG_WRN("Failed to send data over UART");
+		}
+	}
+    
     return err; 
+}
+
+
+void uart_buffer_data(struct uart_data_t *tx)
+{
+	k_fifo_put(&fifo_uart_tx_data, tx);
+}
+
+void clean_nus_buffer_data(void)
+{
+	struct uart_data_t *buf;
+	while(1)
+	{
+		buf = k_fifo_get(&fifo_uart_tx_data, K_NO_WAIT);
+		if (!buf) {
+			return;
+		}
+
+		k_free(buf);
+	}
 }
 
 
@@ -212,7 +249,7 @@ static void update_adv_payload(struct uart_cmd_rsp_t * uart_data, struct uart_cm
 		LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
 		memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
 
-		if(is_ble_connected())
+		if(is_ble_paired())
 		{
 			err = update_advertising();
 		}	
@@ -360,7 +397,7 @@ static void set_device_name(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_r
 		memcpy(device_name, uart_data->data, name_len);
 		device_name[name_len] = '\0';
 		LOG_INF("Device name set to: %s", device_name);
-		if(!is_ble_connected())
+		if(!is_ble_paired())
 		{
 			err = set_ble_device_name(device_name);
 			err += update_advertising();
@@ -515,38 +552,38 @@ uint8_t get_device_status(void) {
 }
 
 
-void on_packet_nus_data(uint8_t *buffer, uint16_t length)
-{
-	int err;
-	nus_data_t send_buffer = {0};
+// void on_packet_nus_data(uint8_t *buffer, uint16_t length)
+// {
+// 	int err;
+// 	nus_data_t send_buffer = {0};
 	
-	send_buffer.data = k_calloc(length+1, sizeof(uint8_t));
-	if (send_buffer.data != NULL) 
-	{
-		memcpy(send_buffer.data, buffer, length);		
-		send_buffer.length = length;
+// 	send_buffer.data = k_calloc(length+1, sizeof(uint8_t));
+// 	if (send_buffer.data != NULL) 
+// 	{
+// 		memcpy(send_buffer.data, buffer, length);		
+// 		send_buffer.length = length;
 
-		if(0 == k_msgq_num_free_get(&tx_send_queue))
-		{
-			/* message queue is full ,we have to delete the oldest data to reserve room for the new data */
-			nus_data_t data_buffer = {0};
-			k_msgq_get(&tx_send_queue, &data_buffer, K_NO_WAIT);
-			LOG_DBG("Droped data:[%d]:%s\n",data_buffer.length, data_buffer.data);
-			k_free(data_buffer.data);
-		}
+// 		if(0 == k_msgq_num_free_get(&tx_send_queue))
+// 		{
+// 			/* message queue is full ,we have to delete the oldest data to reserve room for the new data */
+// 			nus_data_t data_buffer = {0};
+// 			k_msgq_get(&tx_send_queue, &data_buffer, K_NO_WAIT);
+// 			LOG_DBG("Droped data:[%d]:%s\n",data_buffer.length, data_buffer.data);
+// 			k_free(data_buffer.data);
+// 		}
 
-		/** send the uart data to tcp server*/
-		err = k_msgq_put(&tx_send_queue, &send_buffer, K_NO_WAIT);
-		if (err) {
-			LOG_ERR("Message sent error: %d", err);
-			k_free(send_buffer.data);
-		}
-	} 
-	else 
-	{
-		LOG_ERR("Memory not allocated!\n");
-	}
-}
+// 		/** send the uart data to tcp server*/
+// 		err = k_msgq_put(&tx_send_queue, &send_buffer, K_NO_WAIT);
+// 		if (err) {
+// 			LOG_ERR("Message sent error: %d", err);
+// 			k_free(send_buffer.data);
+// 		}
+// 	} 
+// 	else 
+// 	{
+// 		LOG_ERR("Memory not allocated!\n");
+// 	}
+// }
 
 
 void handle_uart_data(struct uart_data_t * uart_data)
@@ -573,7 +610,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
     case HOST_SEND_NUS_DATA_CMD:
-		transparent_flag = true;
+		// transparent_flag = true;
 		response.cmd = HOST_SEND_NUS_DATA_CMD;
 		response.len = 2;
 		response.data[0] = SUCCEED;
@@ -619,6 +656,9 @@ void handle_uart_data(struct uart_data_t * uart_data)
 		set_device_name(&command, &response);
 		LOG_INF("Received command HOST_SET_DEVICE_NAME_CMD");
 		break;
+	case HOST_SET_BLE_PARAMETER_CMD:
+		// set_ble_parameter(&command, &response);
+		LOG_INF("Received command HOST_SET_BLE_PARAMETER_CMD");
     default:
 		response.cmd = HOST_COMMAND_ERROR_CODE_CMD;
 		response.len = 2;

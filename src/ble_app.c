@@ -114,7 +114,11 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	dk_set_led_on(CON_STATUS_LED);
 
 	// uart_send_URC("CONNECTED", strlen("CONNECTED"));
-	uart_send_URC(BLE_CONNECTED_URC, BLE_URC_LENGTH);
+	if(!transparent_flag)
+	{
+		uart_send_URC(BLE_CONNECTED_URC, BLE_URC_LENGTH);
+	}
+	
 	set_device_status(STATUS_CONNECTED, 1);    //set the device status to connected
 	set_device_status(STATUS_ADVERTISING, 0);    //clean the advertising status
 }
@@ -132,14 +136,18 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 		auth_conn = NULL;
 	}
 
+
 	if (current_conn) {
 		bt_conn_unref(current_conn);
 		current_conn = NULL;
 		dk_set_led_off(CON_STATUS_LED);
 	}
+	
 	// uart_send_URC("DISCONNECTED", strlen("DISCONNECTED"));
 	uart_send_URC(BLE_DISCONNECTED_URC, BLE_URC_LENGTH);
 	set_device_status(STATUS_CONNECTED, 0);    //set the device status to disconnected
+	erase_bond_peer();
+	clean_nus_buffer_data();
 }
 
 
@@ -152,7 +160,7 @@ static void security_changed(struct bt_conn *conn, bt_security_t level,
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	if (!err) {
-		uart_send_URC(BLE_PAIRED_URC, BLE_URC_LENGTH);
+		// uart_send_URC(BLE_PAIRED_URC, BLE_URC_LENGTH);
 		set_device_status(STATUS_PAIRED, 1);    //set the device status to paired and bonded
 		LOG_INF("Security changed: %s level %u", addr, level);
 	} else {
@@ -177,12 +185,31 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 };
 
 #if defined(CONFIG_BT_NUS_SECURITY_ENABLED)
-static void auth_passkey_entry(struct bt_conn *conn)
-{
-    char addr[BT_ADDR_LE_STR_LEN];
-    bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+// static void auth_passkey_entry(struct bt_conn *conn)
+// {
+//     char addr[BT_ADDR_LE_STR_LEN];
+//     bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-    LOG_INF("Passkey entered %s: %06u", addr, passkey);
+//     LOG_INF("Passkey entered %s: %06u", addr, passkey);
+// }
+
+static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
+{
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	LOG_INF("Passkey for %s: %06u", addr, passkey);
+}
+
+static void auth_passkey_confirm(struct bt_conn *conn, unsigned int passkey)
+{
+	char addr[BT_ADDR_LE_STR_LEN];
+
+	auth_conn = bt_conn_ref(conn);
+
+	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+
+	LOG_INF("Passkey for %s: %06u", addr, passkey);
 }
 
 static void auth_cancel(struct bt_conn *conn)
@@ -211,6 +238,7 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 }
 
 
+
 static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -219,10 +247,13 @@ static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 
 	LOG_INF("Pairing failed conn: %s, reason %d %s", addr, reason,
 		bt_security_err_to_str(reason));
+
 }
 
 static struct bt_conn_auth_cb conn_auth_callbacks = {
-	.passkey_entry = auth_passkey_entry,
+	// .passkey_entry = auth_passkey_entry,
+	.passkey_display = auth_passkey_display,
+	.passkey_confirm = auth_passkey_confirm,
 	.cancel = auth_cancel,
 };
 
@@ -233,7 +264,8 @@ static struct bt_conn_auth_info_cb conn_auth_info_callbacks = {
 
 int bt_passkey_entry(unsigned int passkey)
 {
-	return bt_conn_auth_passkey_entry(current_conn, passkey);
+	// return bt_conn_auth_passkey_entry(current_conn, passkey);
+	return bt_passkey_set(passkey);
 }
 #else
 static struct bt_conn_auth_cb conn_auth_callbacks;
@@ -278,11 +310,14 @@ static void bt_receive_cb(struct bt_conn *conn, const uint8_t *const data,
 			tx->len++;
 		}
 
-		// err = uart_tx(uart, tx->data, tx->len, SYS_FOREVER_MS);
-		// if (err) {
-		// 	k_fifo_put(&fifo_uart_tx_data, tx);
-		// }
-		uart_send_data(tx);
+		if(transparent_flag)
+		{
+			uart_send_data(tx);
+		}
+		else
+		{
+			uart_buffer_data(tx);
+		}
 	}
 }
 
@@ -291,9 +326,9 @@ static struct bt_nus_cb nus_cb = {
 };
 
 
-bool is_ble_connected(void)
+bool is_ble_paired(void)
 {
-	if (current_conn) {
+	if (get_device_status() & STATUS_PAIRED) {
 		return true;
 	}
 	else
@@ -331,22 +366,26 @@ int update_advertising(void)
 }
 
 
-int ble_send_uart_data(nus_data_t * uart_data)
+int ble_send_uart_data(uint8_t *buffer, uint16_t length)
 {
 	int err = 0;
 
-	if (current_conn) 
+	if (is_ble_paired()) 
 	{
 		/* In a connection - send data via NUS */
-		err = bt_nus_send(NULL, uart_data->data, uart_data->length);
+		err = bt_nus_send(NULL, buffer, length);
 		if (err) {
 			LOG_WRN("Failed to send data over BLE connection: %d", err);
+		}
+		else
+		{
+			LOG_HEXDUMP_INF(buffer, length, "NUS send:\n");
 		}
 	} 
 	else 
 	{
 		err = -ENOTCONN;
-		// LOG_WRN("Not in a connection, buffered data!");
+		LOG_WRN("Not in a connection, drop data!");
 	}
 
 	return err;
@@ -438,6 +477,78 @@ int set_ble_mac_address(uint8_t  *val, uint8_t len)
 	return err;
 }
 #endif
+
+// int set_ble_parameter()
+int set_ble_tx_power(int8_t tx_pwr_lvl)
+{
+	struct net_buf *buf, *rsp = NULL;
+	struct bt_hci_cp_vs_write_tx_power_level *cp;
+	struct bt_hci_rp_vs_write_tx_power_level *rp;
+
+    int16_t err;
+	uint16_t conn_handle;
+	bt_hci_get_conn_handle(current_conn, &conn_handle);
+
+    buf = bt_hci_cmd_create(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL, sizeof(*cp));
+    if (!buf) {
+        LOG_ERR("Unable to allocate command buffer\n");
+        return -ENOBUFS;
+    }
+
+    cp = net_buf_add(buf, sizeof(*cp));
+    cp->handle = sys_cpu_to_le16(conn_handle);
+	cp->handle_type = BT_HCI_VS_LL_HANDLE_TYPE_ADV;
+	cp->tx_power_level = tx_pwr_lvl;
+
+    err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL, buf, &rsp);
+    if (err) {
+        LOG_ERR("Set Tx power err: %d\n", err);
+        return err;
+    }
+
+    rp = (void *)rsp->data;
+    LOG_INF("Actual Tx Power: %d\n", rp->selected_tx_power);
+
+    net_buf_unref(rsp);
+	return err;
+}
+
+
+int get_tx_power(int8_t *tx_pwr_lvl)
+{
+	struct bt_hci_cp_vs_read_tx_power_level *cp;
+	struct bt_hci_rp_vs_read_tx_power_level *rp;
+	struct net_buf *buf, *rsp = NULL;
+	int err = 0;
+	uint16_t conn_handle;
+	bt_hci_get_conn_handle(current_conn, &conn_handle);
+
+
+	*tx_pwr_lvl = 0xFF;
+	buf = bt_hci_cmd_create(BT_HCI_OP_VS_READ_TX_POWER_LEVEL,
+				sizeof(*cp));
+	if (!buf) {
+		LOG_ERR("Unable to allocate command buffer\n");
+		return ENOBUFS;
+	}
+
+	cp = net_buf_add(buf, sizeof(*cp));
+	cp->handle = sys_cpu_to_le16(conn_handle);
+	cp->handle_type = BT_HCI_VS_LL_HANDLE_TYPE_ADV;
+
+	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_READ_TX_POWER_LEVEL,
+				   buf, &rsp);
+	if (err) {
+		LOG_ERR("Read Tx power err: %d\n", err);
+		return err;
+	}
+
+	rp = (void *)rsp->data;
+	*tx_pwr_lvl = rp->tx_power_level;
+
+	net_buf_unref(rsp);
+	return err;
+}
 
 
 int get_ble_mac_address(uint8_t *val)
