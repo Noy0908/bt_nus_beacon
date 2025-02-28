@@ -45,10 +45,14 @@ enum uart_cmd_type {
      */
 	HOST_UART_PING_CMD = 0x01,
 	/**
-	 * @brief host asked to send the payload to the app through NUS.
-     * response with SUCCESS or ERROR.
+	 * @brief host set BLE parameter .
+	 * response with SUCCESS or ERROR.
+	 * 
+	 * parameter format:
+	 * 1 Byte: Tx power & preferred PHY in connection 
+     * 1 Byte: interval (20ms increment)
 	 */
-	HOST_SEND_NUS_DATA_CMD,
+    HOST_SET_BLE_PARAMETER_CMD,
 	/**
 	 * @brief host set the advertisement payload.
      * response with NONE or ERROR.
@@ -100,15 +104,6 @@ enum uart_cmd_type {
 	 * response with SUCCESS or ERROR.
 	 */
     HOST_SET_DEVICE_NAME_CMD,
-	/**
-	 * @brief host set BLE parameter .
-	 * response with SUCCESS or ERROR.
-	 * 
-	 * parameter format:
-	 * 1 Byte: Tx power & preferred PHY in connection 
-     * 1 Byte: interval (20ms increment)
-	 */
-    HOST_SET_BLE_PARAMETER_CMD,
 	/**
 	 * @brief slave send URC to host .
 	 * response with SUCCESS or ERROR.

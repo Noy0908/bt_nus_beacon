@@ -98,6 +98,57 @@ static void advertise_start_without_sd(struct k_work *work)
 }
 
 
+int update_adv_param(uint8_t interval)
+{
+	int err;
+	struct bt_le_adv_param adv_params = *(BT_LE_ADV_CONN_ONE_TIME);
+	adv_params.interval_min = 32*interval;
+	adv_params.interval_max = 32*interval; 
+
+	err = bt_le_adv_stop();
+	if (err != 0) {
+		LOG_ERR("Cannot stop advertisement: err = %d\n", err);
+		return err;
+	}
+
+	if (manuf_size > 0) {
+		uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+
+		struct bt_data new_ad[] = {
+			BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
+			BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size + COMPANY_ID_SIZE),
+		};
+		err = bt_le_adv_start(&adv_params, new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+	}
+	else
+	{
+		if(name_changed)
+		{
+			uint8_t name_len = MIN(strlen(device_name), MAX_NAME_LEN);
+
+			struct bt_data new_ad[] = {
+				BT_DATA(BT_DATA_NAME_COMPLETE, device_name, name_len),
+				// BT_DATA(BT_DATA_MANUFACTURER_DATA, dynamic_manuf_data, manuf_size + COMPANY_ID_SIZE),
+			};
+			err = bt_le_adv_start(&adv_params, new_ad, ARRAY_SIZE(new_ad), NULL, 0);
+		}
+		else
+		{
+			err = bt_le_adv_start(&adv_params, ad, ARRAY_SIZE(ad), NULL, 0);
+		}
+	}
+
+	if (err) {
+		LOG_ERR("Advertising failed to start (err %d)", err);
+	}
+	return err;
+
+	set_device_status(STATUS_ADVERTISING, 1);    //set the device status to advertising
+
+	LOG_INF("Advertising successfully started");
+}
+
+
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -489,8 +540,7 @@ int set_ble_tx_power(int8_t tx_pwr_lvl)
 	struct bt_hci_rp_vs_write_tx_power_level *rp;
 
     int16_t err;
-	uint16_t conn_handle;
-	bt_hci_get_conn_handle(current_conn, &conn_handle);
+	uint16_t cur_handle = 0;
 
     buf = bt_hci_cmd_create(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL, sizeof(*cp));
     if (!buf) {
@@ -499,13 +549,13 @@ int set_ble_tx_power(int8_t tx_pwr_lvl)
     }
 
     cp = net_buf_add(buf, sizeof(*cp));
-    cp->handle = sys_cpu_to_le16(conn_handle);
+    cp->handle = sys_cpu_to_le16(cur_handle);
 	cp->handle_type = BT_HCI_VS_LL_HANDLE_TYPE_ADV;
 	cp->tx_power_level = tx_pwr_lvl;
 
     err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_WRITE_TX_POWER_LEVEL, buf, &rsp);
     if (err) {
-        LOG_ERR("Set Tx power err: %d\n", err);
+        LOG_ERR("Set Tx power to <%d> err: %d\n", tx_pwr_lvl,err);
         return err;
     }
 
@@ -517,15 +567,13 @@ int set_ble_tx_power(int8_t tx_pwr_lvl)
 }
 
 
-int get_tx_power(int8_t *tx_pwr_lvl)
+int get_ble_tx_power(int8_t *tx_pwr_lvl)
 {
 	struct bt_hci_cp_vs_read_tx_power_level *cp;
 	struct bt_hci_rp_vs_read_tx_power_level *rp;
 	struct net_buf *buf, *rsp = NULL;
 	int err = 0;
-	uint16_t conn_handle;
-	bt_hci_get_conn_handle(current_conn, &conn_handle);
-
+	uint16_t cur_handle = 0;
 
 	*tx_pwr_lvl = 0xFF;
 	buf = bt_hci_cmd_create(BT_HCI_OP_VS_READ_TX_POWER_LEVEL,
@@ -536,7 +584,7 @@ int get_tx_power(int8_t *tx_pwr_lvl)
 	}
 
 	cp = net_buf_add(buf, sizeof(*cp));
-	cp->handle = sys_cpu_to_le16(conn_handle);
+	cp->handle = sys_cpu_to_le16(cur_handle);
 	cp->handle_type = BT_HCI_VS_LL_HANDLE_TYPE_ADV;
 
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_VS_READ_TX_POWER_LEVEL,
@@ -656,11 +704,6 @@ int nus_ble_init(void)
 
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
-		// if(bt_get_name())
-		// {
-		// 	memset(device_name, 0, sizeof(device_name));
-		// 	memcpy(device_name, bt_get_name(), strlen(bt_get_name()));
-		// }
 	}
 
 	err = bt_nus_init(&nus_cb);

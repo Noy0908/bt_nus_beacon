@@ -195,22 +195,10 @@ int uart_send_data(struct uart_data_t *tx)
 		if (err) {
 			k_fifo_put(&fifo_uart_tx_data, tx);
 		}
-		LOG_HEXDUMP_INF(tx->data, tx->len, "Send NUS:");
-	}
-	else
-	{
-		struct uart_data_t *buf = k_fifo_get(&fifo_uart_tx_data, K_NO_WAIT);
-		if (!buf) {
-			LOG_ERR("No buffered NUS data!");
-			return -ENOMEM;
-		}
-
-		// err = uart_tx(uart, buf->data, buf->len, SYS_FOREVER_MS);
-		// if (err) {
-		// 	// k_fifo_put(&fifo_uart_tx_data, buf);
-		// 	LOG_WRN("Failed to send data over UART, %d", err);
-		// }
-		LOG_HEXDUMP_INF(tx->data, tx->len, "Send NUS buffer data:\n");
+		if(transparent_flag)
+			LOG_HEXDUMP_INF(tx->data, tx->len, "Send NUS data:");
+		else
+			LOG_HEXDUMP_INF(tx->data, tx->len, "Send uart data:");
 	}
     
     return err; 
@@ -252,7 +240,7 @@ static void update_adv_payload(struct uart_cmd_rsp_t * uart_data, struct uart_cm
 		LOG_INF("manuf_size---name_length: %i---%i", manuf_size, strlen(device_name));
 		memcpy(dynamic_manuf_data + COMPANY_ID_SIZE, uart_data->data, manuf_size);
 
-		if(is_ble_paired())
+		if(!is_ble_paired())
 		{
 			err = update_advertising();
 		}	
@@ -354,6 +342,48 @@ static void set_uart_baudrate(struct uart_cmd_rsp_t * uart_data, struct uart_cmd
 		response->data[2] = baudrate>>8 & 0xFF;
 		response->data[3] = baudrate & 0xFF;
 		response->len = sizeof(baudrate);
+	}
+}
+
+
+static void set_ble_parameter(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
+{
+	int8_t tx_val = 0;
+	if(uart_data->len)		//write command
+	{
+		int16_t err = 0;
+		if(uart_data->len == 3)
+		{
+			tx_val = (uart_data->data[0] << 8) | uart_data->data[1];
+			int16_t err = set_ble_tx_power(tx_val);
+			err += update_adv_param(uart_data->data[2]);
+		}
+		else
+		{
+			err = -EINVAL;
+		}
+
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_SET_BLE_PARAMETER_CMD;
+		}
+		
+		// memcpy(response->data, &err, sizeof(err));
+		response->data[0] = (err >> 8) & 0xFF;
+		response->data[1] = err & 0xFF;
+		response->len = sizeof(err);
+	}
+	else			//read command
+	{
+		response->cmd = HOST_SET_BLE_PARAMETER_CMD;
+		get_ble_tx_power(&tx_val);
+		response->data[0] = (tx_val >> 8) & 0xFF;
+		response->data[1] = tx_val & 0xFF;
+		response->len = 2;
 	}
 }
 
@@ -508,8 +538,6 @@ static void uart_send_response(struct uart_cmd_rsp_t response)
 	response_payload->data[response_payload->len++] = response.cmd;
 	response_payload->data[response_payload->len++] = (response.len >> 8)&0xFF;
 	response_payload->data[response_payload->len++] = response.len & 0xFF;
-	// memcpy(&response_payload->data[response_payload->len], &response.len, sizeof(response.len));
-	// response_payload->len += sizeof(response.len);
 	memcpy(&response_payload->data[response_payload->len], response.data, response.len);
 	response_payload->len += response.len;
 
@@ -612,16 +640,13 @@ void handle_uart_data(struct uart_data_t * uart_data)
 		response.data[0] = get_device_status();
         LOG_INF("Received command HOST_UART_PING_CMD");
         break;
-    case HOST_SEND_NUS_DATA_CMD:
-		// transparent_flag = true;
-		response.cmd = HOST_SEND_NUS_DATA_CMD;
-		response.len = 2;
-		response.data[0] = SUCCEED;
-        LOG_INF("Received command HOST_SEND_NUS_DATA_CMD");
+    case HOST_SET_BLE_PARAMETER_CMD:
+		set_ble_parameter(&command, &response);
+		LOG_INF("Received command HOST_SET_BLE_PARAMETER_CMD");
         break;
     case HOST_SET_ADV_PAYLOAD_CMD:
         update_adv_payload(&command, &response);
-        LOG_INF("Received command HOST_SET_UART_BAUDRATE_CMD");
+        LOG_INF("Received command HOST_SET_ADV_PAYLOAD_CMD");
         break;
     case HOST_DISCONN_BLE_CMD:
 		force_disconnect_ble(&response);
@@ -659,9 +684,7 @@ void handle_uart_data(struct uart_data_t * uart_data)
 		set_device_name(&command, &response);
 		LOG_INF("Received command HOST_SET_DEVICE_NAME_CMD");
 		break;
-	case HOST_SET_BLE_PARAMETER_CMD:
-		// set_ble_parameter(&command, &response);
-		LOG_INF("Received command HOST_SET_BLE_PARAMETER_CMD");
+		
     default:
 		response.cmd = HOST_COMMAND_ERROR_CODE_CMD;
 		response.len = 2;

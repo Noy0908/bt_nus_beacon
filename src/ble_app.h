@@ -63,6 +63,12 @@ extern int erase_bond_peer(void);
 
 extern int set_ble_device_name(char *name);
 
+extern int update_adv_param(uint8_t interval);
+
+extern int set_ble_tx_power(int8_t tx_pwr_lvl);
+
+extern int get_ble_tx_power(int8_t *tx_pwr_lvl);
+
 extern int set_ble_mac_address(uint8_t  *val, uint8_t len);
 
 extern int get_ble_mac_address(uint8_t *val);
