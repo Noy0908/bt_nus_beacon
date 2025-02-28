@@ -29,6 +29,7 @@ K_SEM_DEFINE(ble_init_ok, 0, 1);
 static struct bt_conn *auth_conn;
 static struct k_work advertise_start_work;
 
+
 bool name_changed = false;
 
 struct bt_conn *current_conn;
@@ -123,6 +124,8 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	set_device_status(STATUS_ADVERTISING, 0);    //clean the advertising status
 }
 
+
+extern struct k_work transparent_buffer_work;
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
@@ -145,9 +148,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 	
 	// uart_send_URC("DISCONNECTED", strlen("DISCONNECTED"));
 	uart_send_URC(BLE_DISCONNECTED_URC, BLE_URC_LENGTH);
-	set_device_status(STATUS_CONNECTED, 0);    //set the device status to disconnected
+	set_device_status(STATUS_CONNECTED | STATUS_PAIRED, 0);    //set the device status to disconnected
 	erase_bond_peer();
-	clean_nus_buffer_data();
+	k_work_submit(&transparent_buffer_work);
 }
 
 
@@ -658,7 +661,6 @@ int nus_ble_init(void)
 		// 	memset(device_name, 0, sizeof(device_name));
 		// 	memcpy(device_name, bt_get_name(), strlen(bt_get_name()));
 		// }
-		
 	}
 
 	err = bt_nus_init(&nus_cb);

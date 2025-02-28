@@ -195,19 +195,22 @@ int uart_send_data(struct uart_data_t *tx)
 		if (err) {
 			k_fifo_put(&fifo_uart_tx_data, tx);
 		}
+		LOG_HEXDUMP_INF(tx->data, tx->len, "Send NUS:");
 	}
 	else
 	{
 		struct uart_data_t *buf = k_fifo_get(&fifo_uart_tx_data, K_NO_WAIT);
 		if (!buf) {
+			LOG_ERR("No buffered NUS data!");
 			return -ENOMEM;
 		}
 
-		err = uart_tx(uart, buf->data, buf->len, 0);
-		if (err) {
-			// k_fifo_put(&fifo_uart_tx_data, buf);
-			LOG_WRN("Failed to send data over UART");
-		}
+		// err = uart_tx(uart, buf->data, buf->len, SYS_FOREVER_MS);
+		// if (err) {
+		// 	// k_fifo_put(&fifo_uart_tx_data, buf);
+		// 	LOG_WRN("Failed to send data over UART, %d", err);
+		// }
+		LOG_HEXDUMP_INF(tx->data, tx->len, "Send NUS buffer data:\n");
 	}
     
     return err; 

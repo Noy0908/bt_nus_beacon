@@ -35,7 +35,7 @@ LOG_MODULE_REGISTER(peripheral_uart);
 #define KEY_PASSKEY_REJECT 				DK_BTN2_MSK
 
 
-
+struct k_work transparent_buffer_work;
 
 void error(void)
 {
@@ -60,11 +60,7 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 	{
 		/* On button press */
 		transparent_flag = true;
-		uart_send_URC(BLE_ENTER_TRANSPARENT_MODE_URC, BLE_URC_LENGTH);
-		if(is_ble_paired())
-		{
-			uart_send_data(NULL);
-		}
+		k_work_submit(&transparent_buffer_work);
 	}
 }
 
@@ -80,6 +76,21 @@ static void configure_gpio(void)
 	err = dk_leds_init();
 	if (err) {
 		LOG_ERR("Cannot init LEDs (err: %d)", err);
+	}
+}
+
+
+static void handle_nus_buffer_data(struct k_work *work)
+{
+	
+	if(transparent_flag && is_ble_paired())
+	{
+		uart_send_URC(BLE_ENTER_TRANSPARENT_MODE_URC, BLE_URC_LENGTH);
+		// uart_send_data(NULL);
+	}
+	else
+	{
+		clean_nus_buffer_data();
 	}
 }
 
@@ -104,6 +115,8 @@ int main(void)
 	if (err) {
 		error();
 	}
+
+	k_work_init(&transparent_buffer_work, handle_nus_buffer_data);
 
 	for (;;) {
 		dk_set_led(RUN_STATUS_LED, (++blink_status) % 2);

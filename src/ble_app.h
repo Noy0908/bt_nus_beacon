@@ -42,7 +42,7 @@
 
 extern struct k_sem ble_init_ok;
 
-// extern struct bt_conn *current_conn;
+
 
 extern uint8_t manuf_size;
 extern unsigned int passkey;
