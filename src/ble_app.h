@@ -45,7 +45,8 @@ extern struct k_sem ble_init_ok;
 
 
 extern uint8_t manuf_size;
-extern unsigned int passkey;
+extern unsigned int cur_passkey;
+extern int8_t last_rssi;
 extern char device_name[MAX_NAME_LEN+1];
 extern uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE];
 

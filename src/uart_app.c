@@ -287,30 +287,42 @@ static void force_disconnect_ble(struct uart_cmd_rsp_t *response)
 static void set_passkey(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 { 
 	int16_t err = 0;
-	if (uart_data->len != PASSKEY_ENTRY_LENGTH) {
-		LOG_WRN("Invalid passkey length");
-		err = -EINVAL;
-	}
-	else
+	if(uart_data->len)	//write command
 	{
-		passkey = strtoul(uart_data->data, NULL, 10);
-		// memcpy(&passkey, uart_data->data, sizeof(passkey));
-		LOG_INF("Passkey set to: %06u", passkey);
-		err = bt_passkey_entry(passkey);
+		if (uart_data->len != PASSKEY_ENTRY_LENGTH) {
+			LOG_WRN("Invalid passkey length");
+			err = -EINVAL;
+		}
+		else
+		{
+			unsigned int passkey = strtoul(uart_data->data, NULL, 10);
+			cur_passkey = passkey;
+			// memcpy(&passkey, uart_data->data, sizeof(passkey));
+			LOG_INF("Passkey set to: %06u", passkey);
+			err = bt_passkey_entry(passkey);
+		}
+	
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_SET_PASSKEY_CMD;
+		}
+		// memcpy(response->data, &err, sizeof(err));
+		response->data[0] = (err >> 8) & 0xFF;
+		response->data[1] = err & 0xFF;
+		response->len = sizeof(err);
 	}
-
-	if(err)
-	{
-		response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
-	}
-	else
+	else	//read commmand
 	{
 		response->cmd = HOST_SET_PASSKEY_CMD;
+		response->len = PASSKEY_ENTRY_LENGTH;
+		char passkey_buf[PASSKEY_ENTRY_LENGTH+1] = {0};
+		snprintf(passkey_buf, PASSKEY_ENTRY_LENGTH + 1, "%06u", cur_passkey);
+		memcpy(response->data, passkey_buf, PASSKEY_ENTRY_LENGTH);
 	}
-	// memcpy(response->data, &err, sizeof(err));
-	response->data[0] = (err >> 8) & 0xFF;
-	response->data[1] = err & 0xFF;
-	response->len = sizeof(err);
 }
 
 
@@ -349,6 +361,7 @@ static void set_uart_baudrate(struct uart_cmd_rsp_t * uart_data, struct uart_cmd
 static void set_ble_parameter(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 {
 	int8_t tx_val = 0;
+	static uint8_t adv_interval = 0;
 	if(uart_data->len)		//write command
 	{
 		int16_t err = 0;
@@ -356,7 +369,8 @@ static void set_ble_parameter(struct uart_cmd_rsp_t * uart_data, struct uart_cmd
 		{
 			tx_val = (uart_data->data[0] << 8) | uart_data->data[1];
 			int16_t err = set_ble_tx_power(tx_val);
-			err += update_adv_param(uart_data->data[2]);
+			adv_interval = uart_data->data[2];
+			err += update_adv_param(adv_interval);
 		}
 		else
 		{
@@ -383,7 +397,8 @@ static void set_ble_parameter(struct uart_cmd_rsp_t * uart_data, struct uart_cmd
 		get_ble_tx_power(&tx_val);
 		response->data[0] = (tx_val >> 8) & 0xFF;
 		response->data[1] = tx_val & 0xFF;
-		response->len = 2;
+		response->data[2] = adv_interval;
+		response->len = 3;
 	}
 }
 
@@ -509,11 +524,17 @@ static void read_ble_rssi(struct uart_cmd_rsp_t *response)
 	int16_t err = read_conn_rssi(&rssi);
 	if(err)
 	{
-		response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
-		// memcpy(response->data, &err, sizeof(err));
-		response->data[0] = (err >> 8) & 0xFF;
-		response->data[1] = err & 0xFF;
-		response->len = sizeof(err);
+		// response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		// // memcpy(response->data, &err, sizeof(err));
+		// response->data[0] = (err >> 8) & 0xFF;
+		// response->data[1] = err & 0xFF;
+		// response->len = sizeof(err);
+
+		LOG_INF("Last BLE RSSI: %d", last_rssi);
+		response->cmd = HOST_READ_BLE_RSSI_CMD;
+		response->data[0] = (last_rssi >> 8) & 0xFF;
+		response->data[1] = last_rssi & 0xFF;
+		response->len = 2;
 	}
 	else
 	{

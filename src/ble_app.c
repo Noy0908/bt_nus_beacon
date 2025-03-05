@@ -35,7 +35,8 @@ bool name_changed = false;
 struct bt_conn *current_conn;
 
 uint8_t manuf_size = 0;
-unsigned int passkey = 0;
+unsigned int cur_passkey = 0;
+int8_t last_rssi = 0;
 
 char device_name[MAX_NAME_LEN+1] = DEVICE_NAME;
 uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
@@ -152,6 +153,7 @@ int update_adv_param(uint8_t interval)
 static void connected(struct bt_conn *conn, uint8_t err)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
+	int8_t rssi;
 
 	if (err) {
 		LOG_ERR("Connection failed, err 0x%02x %s", err, bt_hci_err_to_str(err));
@@ -162,6 +164,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
 	LOG_INF("Connected %s", addr);
 
 	current_conn = bt_conn_ref(conn);
+	read_conn_rssi(&rssi);
 
 	dk_set_led_on(CON_STATUS_LED);
 
@@ -252,6 +255,7 @@ static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 	char addr[BT_ADDR_LE_STR_LEN];
 
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+	cur_passkey = passkey;
 	LOG_INF("Passkey for %s: %06u", addr, passkey);
 }
 
@@ -658,6 +662,7 @@ int16_t read_conn_rssi(int8_t *rssi)
 
     rp = (void *)rsp->data;
     *rssi = rp->rssi;
+	last_rssi = *rssi;
 
     net_buf_unref(rsp);
 	return err;
