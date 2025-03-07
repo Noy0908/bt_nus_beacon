@@ -55,12 +55,16 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 	if (buttons & NUS_TRANSPARENT_MODE) {
 		/* On button press */
 		transparent_flag = false;
+		k_work_submit(&transparent_buffer_work);
 	}
 	else
 	{
 		/* On button press */
-		transparent_flag = true;
-		k_work_submit(&transparent_buffer_work);
+		if(!transparent_flag)
+		{
+			transparent_flag = true;
+			k_work_submit(&transparent_buffer_work);
+		}
 	}
 }
 
@@ -83,12 +87,19 @@ static void configure_gpio(void)
 static void handle_nus_buffer_data(struct k_work *work)
 {
 	
-	if(transparent_flag && is_ble_paired())
+	// if(transparent_flag && is_ble_paired())
+	if(transparent_flag)
 	{
 		uart_send_URC(BLE_ENTER_TRANSPARENT_MODE_URC, BLE_URC_LENGTH);
 		// uart_send_data(NULL);
 	}
 	else
+	{
+		uart_send_URC(BLE_EXIT_TRANSPARENT_MODE_URC, BLE_URC_LENGTH);
+	}
+
+	// ble disconnect, clean the transparent buffer data
+	if(is_ble_paired() == false)
 	{
 		clean_nus_buffer_data();
 	}

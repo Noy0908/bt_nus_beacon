@@ -361,7 +361,7 @@ static void set_uart_baudrate(struct uart_cmd_rsp_t * uart_data, struct uart_cmd
 static void set_ble_parameter(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
 {
 	int8_t tx_val = 0;
-	static uint8_t adv_interval = 0;
+	static uint8_t adv_interval = (CONFIG_BT_NUS_ADVERTISING_INTERVAL * 0.625) / 20;
 	if(uart_data->len)		//write command
 	{
 		int16_t err = 0;
@@ -494,6 +494,16 @@ static int read_device_info(struct uart_cmd_rsp_t *response)
 	get_ble_mac_address(val);
 	memcpy(&response->data[len], val, sizeof(val));
 	len += sizeof(val);
+	response->data[len++] = 0X2C;			//' , ' as the separator
+
+	response->data[len++] = (last_rssi >> 8) & 0xFF;
+	response->data[len++] = last_rssi & 0xFF;
+	response->data[len++] = 0X2C;			//' , ' as the separator
+	
+	char passkey_buf[PASSKEY_ENTRY_LENGTH+1] = {0};
+	snprintf(passkey_buf, PASSKEY_ENTRY_LENGTH + 1, "%06u", cur_passkey);
+	memcpy(&response->data[len], passkey_buf, PASSKEY_ENTRY_LENGTH);
+	len += PASSKEY_ENTRY_LENGTH;
 
 	response->len = len;
 	return 0;
@@ -704,6 +714,13 @@ void handle_uart_data(struct uart_data_t * uart_data)
 	case HOST_SET_DEVICE_NAME_CMD:
 		set_device_name(&command, &response);
 		LOG_INF("Received command HOST_SET_DEVICE_NAME_CMD");
+		break;
+	case HOST_ENTER_TRANSPARENT_MODE_CMD:
+		transparent_flag = true;
+		response.cmd = HOST_REPORT_URC_CMD;
+		response.len = BLE_URC_LENGTH;
+		response.data[0] = BLE_ENTER_TRANSPARENT_MODE_URC;
+		LOG_INF("Received command HOST_ENTER_TRANSPARENT_MODE_CMD");
 		break;
 		
     default:

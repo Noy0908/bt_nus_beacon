@@ -35,12 +35,12 @@ bool name_changed = false;
 struct bt_conn *current_conn;
 
 uint8_t manuf_size = 0;
-unsigned int cur_passkey = 0;
+unsigned int cur_passkey = CONFIG_BT_NUS_FIXED_PASSKEY;
 int8_t last_rssi = 0;
 
 char device_name[MAX_NAME_LEN+1] = DEVICE_NAME;
-uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] =
-	{CONFIG_BT_COMPANY_ID};
+uint8_t dynamic_manuf_data[DYNAMIC_MANUF_DATA_SIZE + COMPANY_ID_SIZE] = 
+	{CONFIG_BT_COMPANY_ID & 0xFF, CONFIG_BT_COMPANY_ID >> 8};
 
 static const struct bt_data ad[] = {
 	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -716,6 +716,11 @@ int nus_ble_init(void)
 		LOG_ERR("Failed to initialize UART service (err: %d)", err);
 		return err;
 	}
+
+#if defined(CONFIG_BT_FIXED_PASSKEY)
+	if (bt_passkey_set(CONFIG_BT_NUS_FIXED_PASSKEY) != 0)
+		return false;
+#endif
 
 	k_work_submit(&advertise_start_work);
 

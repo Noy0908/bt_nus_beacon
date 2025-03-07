@@ -31,7 +31,8 @@
 #define BLE_DISCONNECTED_URC			0x03        //BLE disconnect
 #define BLE_PAIRED_URC			        0x04        //BLE paired
 #define BLE_INCOMING_NUS_URC			0x05        //Received NUS data from app
-#define BLE_ENTER_TRANSPARENT_MODE_URC	0x06        //the NRF5 device enter transparent mode successfully
+#define BLE_ENTER_TRANSPARENT_MODE_URC	0x06        //the NRF5 device enter transparent mode successfully 
+#define BLE_EXIT_TRANSPARENT_MODE_URC	0x07        //the NRF5 device exit transparent mode successfully 
 
 
 // typedef struct {

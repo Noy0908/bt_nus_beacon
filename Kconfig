@@ -51,6 +51,13 @@ config BT_NUS_UART_RX_WAIT_TIME
 	help
 	  Wait for RX complete event time in microseconds
 
+config BT_NUS_FIXED_PASSKEY
+	int "Define the default passkey for NUS"
+	depends on BT_FIXED_PASSKEY
+	default 123456
+	help
+	  Define the default password for pairing with the Bluetooth LE device.
+
 config SETTINGS
 	default y
 

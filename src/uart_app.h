@@ -105,6 +105,11 @@ enum uart_cmd_type {
 	 */
     HOST_SET_DEVICE_NAME_CMD,
 	/**
+	 * @brief host send comamnd to enter transparent mode .
+	 * response with SUCCESS or ERROR.
+	 */
+    HOST_ENTER_TRANSPARENT_MODE_CMD,
+	/**
 	 * @brief slave send URC to host .
 	 * response with SUCCESS or ERROR.
 	 */
