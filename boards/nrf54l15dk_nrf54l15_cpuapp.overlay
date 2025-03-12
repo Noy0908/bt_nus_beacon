@@ -7,8 +7,24 @@
 / {
 	chosen {
 		nordic,nus-uart = &uart20;
+		zephyr,shell-uart = &uart30;
+		zephyr,console = &uart30;
+		zephyr,uart-mcumgr = &uart30;
+		zephyr,bt-mon-uart = &uart30;
+		zephyr,bt-c2h-uart = &uart30;
 	};
 };
+
+
+&uart30 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart30_default>;
+	pinctrl-1 = <&uart30_sleep>;
+	pinctrl-names = "default", "sleep";
+	/delete-property/ hw-flow-control;
+};
+
 
 &uart20 {
 	current-speed = <9600>;
