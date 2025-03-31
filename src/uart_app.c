@@ -477,6 +477,13 @@ static void set_device_name(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_r
 	
 }
 
+static void read_ble_paired_info(struct uart_cmd_rsp_t *response)
+{
+	response->cmd = HOST_SET_BLE_MAC_ADDRESS_CMD;
+	response->len = BT_MAC_ADDR_SIZE;
+	get_last_bonded_addr(response->data);
+}
+
 static int read_device_info(struct uart_cmd_rsp_t *response)
 {
 	uint8_t len = 0;
@@ -555,6 +562,37 @@ static void read_ble_rssi(struct uart_cmd_rsp_t *response)
 		response->len = 2;
 	}
 }
+
+
+static void control_ble_advertise(struct uart_cmd_rsp_t * uart_data, struct uart_cmd_rsp_t *response)
+{
+	if(uart_data->len)		//write command
+	{
+		uint8_t cmd = uart_data->data[0];
+	
+		int16_t err = start_stop_advertise(cmd);
+		if(err)
+		{
+			response->cmd = HOST_COMMAND_ERROR_CODE_CMD;
+		}
+		else
+		{
+			response->cmd = HOST_CONTROL_ADVERTISE_CMD;
+		}
+		
+		// memcpy(response->data, &err, sizeof(err));
+		response->data[0] = (err >> 8) & 0xFF;
+		response->data[1] = err & 0xFF;
+		response->len = sizeof(err);
+	}
+	else		//read command
+	{
+		response->cmd = HOST_CONTROL_ADVERTISE_CMD;
+		response->len = 1;
+		response->data[0] = is_ble_advertising() ? 1 : 0;
+	}
+}
+
 
 
 static void uart_send_response(struct uart_cmd_rsp_t response)
@@ -722,7 +760,14 @@ void handle_uart_data(struct uart_data_t * uart_data)
 		response.data[0] = BLE_ENTER_TRANSPARENT_MODE_URC;
 		LOG_INF("Received command HOST_ENTER_TRANSPARENT_MODE_CMD");
 		break;
-		
+	case HOST_READ_PAIRED_INFO_CMD:
+		read_ble_paired_info(&response);
+		LOG_INF("Received command HOST_READ_PAIRED_INFO_CMD");
+		break;
+	case HOST_CONTROL_ADVERTISE_CMD:
+		control_ble_advertise(&command, &response);
+		LOG_INF("Received command HOST_CONTROL_ADVERTISE_CMD");
+		break;
     default:
 		response.cmd = HOST_COMMAND_ERROR_CODE_CMD;
 		response.len = 2;

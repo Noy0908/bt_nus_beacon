@@ -110,6 +110,20 @@ enum uart_cmd_type {
 	 */
     HOST_ENTER_TRANSPARENT_MODE_CMD,
 	/**
+	 * @brief host send comamnd to read out the last paired device's MAC address .
+	 * response with last paired MAC address.
+	 */
+    HOST_READ_PAIRED_INFO_CMD,
+	/**
+	 * @brief host send comamnd to start/stop advertising .
+	 * response with SUCCESS or ERROR.
+	 * 
+	 * * 1 Byte cmd format:
+	 * 1 : start advertising
+	 * 0 : stop advertising
+	 */
+    HOST_CONTROL_ADVERTISE_CMD,
+	/**
 	 * @brief slave send URC to host .
 	 * response with SUCCESS or ERROR.
 	 */

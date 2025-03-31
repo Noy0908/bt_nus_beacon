@@ -29,6 +29,7 @@ K_SEM_DEFINE(ble_init_ok, 0, 1);
 static struct bt_conn *auth_conn;
 static struct k_work advertise_start_work;
 
+static bt_addr_le_t bond_addr;
 
 bool name_changed = false;
 
@@ -148,6 +149,79 @@ int update_adv_param(uint8_t interval)
 
 	LOG_INF("Advertising successfully started");
 }
+
+
+
+int start_stop_advertise(uint8_t cmd)
+{
+	int err = 0;
+	// LOG_INF("Advertising cmd is:%d\n", cmd);
+	if (cmd) 
+	{
+		if(!is_ble_advertising())
+		{
+			k_work_submit(&advertise_start_work);
+		}
+		else
+		{
+			return 0;
+		}
+	} 
+	else 
+	{
+		if(is_ble_advertising())
+		{
+			err = bt_le_adv_stop();
+			if (!err) {
+				set_device_status(STATUS_ADVERTISING, 0);    //clean the advertising status
+			}
+			else
+			{
+				LOG_ERR("Failed to stop advertising: %d", err);
+			}
+		}
+		else
+		{
+			return 0;
+		}
+	}
+	return err;
+}
+
+
+static void copy_last_bonded_addr(const struct bt_bond_info *info, void *user_data)
+{
+	int *bond_cnt = user_data;
+
+	if ((*bond_cnt) < 0) {
+		return;
+	}
+
+	(*bond_cnt)++;
+	bt_addr_le_copy(&bond_addr, &info->addr);
+}
+
+
+
+static int list_bond_device(void)
+{
+	int bond_cnt = 0;
+
+	bt_foreach_bond(BT_ID_DEFAULT, copy_last_bonded_addr, &bond_cnt);
+
+	return bond_cnt;
+}
+
+
+int get_last_bonded_addr(uint8_t *addr)
+{
+	list_bond_device();
+
+	memcpy(addr, bond_addr.a.val, sizeof(bond_addr.a.val));
+	
+	return 0;
+}
+
 
 
 static void connected(struct bt_conn *conn, uint8_t err)
@@ -387,6 +461,18 @@ static struct bt_nus_cb nus_cb = {
 bool is_ble_paired(void)
 {
 	if (get_device_status() & STATUS_PAIRED) {
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+
+bool is_ble_advertising(void)
+{
+	if (get_device_status() & STATUS_ADVERTISING) {
 		return true;
 	}
 	else

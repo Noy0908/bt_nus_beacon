@@ -55,7 +55,13 @@ extern int nus_ble_init(void);
 
 extern bool is_ble_paired(void);
 
+extern bool is_ble_advertising(void);
+
 extern int update_advertising(void);
+
+extern int start_stop_advertise(uint8_t cmd);
+
+extern int get_last_bonded_addr(uint8_t *addr);
 
 extern int ble_send_uart_data(uint8_t *buffer, uint16_t length);
 
