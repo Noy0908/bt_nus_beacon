@@ -215,9 +215,18 @@ static int list_bond_device(void)
 
 int get_last_bonded_addr(uint8_t *addr)
 {
-	list_bond_device();
-
-	memcpy(addr, bond_addr.a.val, sizeof(bond_addr.a.val));
+	uint8_t cnt = list_bond_device();
+	if(cnt)
+	{
+		memcpy(addr, bond_addr.a.val, sizeof(bond_addr.a.val));
+		LOG_INF("Last bonded addr: %02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+		return 0;
+	}
+	else
+	{
+		memset(bond_addr.a.val, 0,  sizeof(bond_addr.a.val));
+		LOG_ERR("No bonded device found\n");
+	}
 	
 	return 0;
 }
