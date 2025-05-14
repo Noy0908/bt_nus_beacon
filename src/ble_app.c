@@ -342,16 +342,16 @@ static void auth_passkey_display(struct bt_conn *conn, unsigned int passkey)
 	LOG_INF("Passkey for %s: %06u", addr, passkey);
 }
 
-static void auth_passkey_confirm(struct bt_conn *conn, unsigned int passkey)
-{
-	char addr[BT_ADDR_LE_STR_LEN];
+// static void auth_passkey_confirm(struct bt_conn *conn, unsigned int passkey)
+// {
+// 	char addr[BT_ADDR_LE_STR_LEN];
 
-	auth_conn = bt_conn_ref(conn);
+// 	auth_conn = bt_conn_ref(conn);
 
-	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
+// 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
-	LOG_INF("Passkey for %s: %06u", addr, passkey);
-}
+// 	LOG_INF("Passkey for %s: %06u", addr, passkey);
+// }
 
 static void auth_cancel(struct bt_conn *conn)
 {
@@ -392,9 +392,8 @@ static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
 }
 
 static struct bt_conn_auth_cb conn_auth_callbacks = {
-	// .passkey_entry = auth_passkey_entry,
 	.passkey_display = auth_passkey_display,
-	.passkey_confirm = auth_passkey_confirm,
+	// .passkey_confirm = auth_passkey_confirm,
 	.cancel = auth_cancel,
 };
 
