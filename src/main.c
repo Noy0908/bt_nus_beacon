@@ -25,7 +25,7 @@
 LOG_MODULE_REGISTER(peripheral_uart);
 
 
-#define STACKSIZE 						0x2000
+#define STACKSIZE 						2048
 #define PRIORITY 						7
 
 #define RUN_STATUS_LED 					DK_LED1

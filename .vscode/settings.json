@@ -9,5 +9,6 @@
         "setting_app.h": "c",
         "nus_setting_app.h": "c",
         "nus.h": "c"
-    }
+    },
+    "nrf-connect.applications": []
 }
