@@ -42,7 +42,7 @@
 };
 
 &reg1 {
-	// zephyr,deferred-init;
+	zephyr,deferred-init;
 	regulator-initial-mode = <NRF5X_REG_MODE_LDO>;
 };
 
