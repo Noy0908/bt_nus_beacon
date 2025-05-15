@@ -7,47 +7,11 @@
 / {
 	chosen {
 		zephyr,code-partition = &boot_partition;
-		nordic,nus-uart = &uart0;
 	};
 };
 
-
-&uart0 {
-	current-speed = <9600>;
-};
-
-&uart0_default {
-	/* Disconnect CTS and RTS lines from pins.
-	 * This is a temporary workaround for increased current consumption
-	 * observed on nRF52840 v3.0.0 only (~450 uA more then on v2.1.0).
-	 */
-	group1 {
-		psels = <NRF_PSEL(UART_TX, 0, 17)>,
-			<NRF_PSEL(UART_RX, 0, 15)>;
-	};
-};
-
-&uart0_sleep {
-	group1 {
-		psels = <NRF_PSEL(UART_TX, 0, 17)>,
-			<NRF_PSEL(UART_RX, 0, 15)>;
-		low-power-enable;
-	};
-};
-
-&led0 {
-	gpios = <&gpio0 9 0>;
-};
-
-&button0 {
-	gpios = <&gpio1 9 0>;
-};
 
 &reg1 {
 	zephyr,deferred-init;
 	regulator-initial-mode = <NRF5X_REG_MODE_LDO>;
-};
-
-&led2 {
-	gpios = <&gpio0 4 0>;
 };
